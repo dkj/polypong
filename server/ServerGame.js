@@ -43,11 +43,28 @@ export class ServerGame {
 
     removePlayer(socketId) {
         if (!this.players.has(socketId)) return;
-        const index = this.players.get(socketId);
+        const edgeIndex = this.players.get(socketId);
         this.players.delete(socketId);
-        // We probably shouldn't remove the paddle mid-game to preserve indices?
-        // Or turn it into AI/Wall?
-        // For now, keep the paddle but it won't move.
+
+        // Remove the paddle for this player - their edge becomes a normal bouncing wall
+        this.paddles = this.paddles.filter(p => p.edgeIndex !== edgeIndex);
+
+        // If the game was running (PLAYING), terminate it since a player left
+        if (this.running && this.gameState === 'PLAYING') {
+            this.terminateGame('A player left the game');
+        }
+    }
+
+    terminateGame(reason) {
+        this.gameState = 'TERMINATED';
+        this.running = false;
+        clearInterval(this.interval);
+
+        // Notify all clients
+        this.io.to(this.roomId).emit('gameTerminated', {
+            reason: reason,
+            lastScore: Math.floor(this.score)
+        });
     }
 
     handleInput(socketId, dir) {

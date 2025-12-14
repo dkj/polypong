@@ -213,4 +213,136 @@ testMultiplayerFreezeAndRestart();
 testPaddleWidthBroadcast();
 testGoalEventIncludesScore();
 
+// ============ Player Disconnect Tests ============
+
+function testPlayerDisconnectTerminatesGame() {
+    console.log('\nTest: Player Disconnect Terminates Active Game');
+    const game = new ServerGame(mockIo, 'test_room_disconnect');
+    game.addPlayer('p1');
+    game.addPlayer('p2');
+    game.start();
+    game.processRestart(); // Start playing
+
+    assert.equal(game.gameState, 'PLAYING', 'Game should be playing');
+    assert.equal(game.players.size, 2, 'Should have 2 players');
+
+    // Player 1 disconnects
+    game.removePlayer('p1');
+
+    assert.equal(game.gameState, 'TERMINATED', 'Game should be TERMINATED after player leaves');
+    assert.equal(game.running, false, 'Game should stop running');
+
+    console.log('✅ Passed: Player disconnect terminates active game.');
+    game.stop();
+}
+
+function testDisconnectRemovesPaddle() {
+    console.log('\nTest: Disconnect Removes Paddle (Edge Becomes Wall)');
+    const game = new ServerGame(mockIo, 'test_room_paddle_remove');
+    game.addPlayer('p1');
+    game.addPlayer('p2');
+    game.start();
+    game.processRestart();
+
+    assert.equal(game.paddles.length, 2, 'Should start with 2 paddles');
+
+    // Verify paddle edge indices
+    const paddleEdges = game.paddles.map(p => p.edgeIndex);
+    assert.ok(paddleEdges.includes(0), 'Player 1 should have edge 0');
+    assert.ok(paddleEdges.includes(1), 'Player 2 should have edge 1');
+
+    // Player 1 disconnects
+    game.removePlayer('p1');
+
+    assert.equal(game.paddles.length, 1, 'Should have 1 paddle after disconnect');
+    assert.equal(game.paddles[0].edgeIndex, 1, 'Remaining paddle should be on edge 1');
+
+    console.log('✅ Passed: Disconnected player paddle removed.');
+    game.stop();
+}
+
+function testDisconnectEmitsTerminatedEvent() {
+    console.log('\nTest: Disconnect Emits gameTerminated Event');
+
+    let terminatedEvent = null;
+    const captureIo = {
+        to: () => ({
+            emit: (event, data) => {
+                if (event === 'gameTerminated') {
+                    terminatedEvent = data;
+                }
+            }
+        })
+    };
+
+    const game = new ServerGame(captureIo, 'test_room_event');
+    game.addPlayer('p1');
+    game.addPlayer('p2');
+    game.start();
+    game.processRestart();
+
+    // Simulate some game time
+    for (let i = 0; i < 60; i++) {
+        game.update(0.016);
+    }
+
+    // Player disconnects
+    game.removePlayer('p1');
+
+    assert.ok(terminatedEvent, 'gameTerminated event should be emitted');
+    assert.equal(terminatedEvent.reason, 'A player left the game', 'Should have correct reason');
+    assert.ok(typeof terminatedEvent.lastScore === 'number', 'Should include lastScore');
+
+    console.log('✅ Passed: gameTerminated event emitted correctly.');
+    game.stop();
+}
+
+function testDisconnectDuringScoring() {
+    console.log('\nTest: Disconnect During SCORING State Does NOT Terminate');
+    const game = new ServerGame(mockIo, 'test_room_scoring_disconnect');
+    game.addPlayer('p1');
+    game.addPlayer('p2');
+    game.start();
+    game.processRestart();
+
+    // Trigger a goal - game should be in SCORING state
+    game.triggerScore(5);
+    assert.equal(game.gameState, 'SCORING', 'Game should be in SCORING state');
+
+    // Player disconnects during scoring state
+    game.removePlayer('p1');
+
+    // Game should NOT switch to TERMINATED (was already frozen)
+    assert.equal(game.gameState, 'SCORING', 'Game should remain in SCORING state');
+
+    console.log('✅ Passed: Disconnect during SCORING does not trigger termination.');
+    game.stop();
+}
+
+function testDisconnectNonExistentPlayer() {
+    console.log('\nTest: Removing Non-Existent Player Does Nothing');
+    const game = new ServerGame(mockIo, 'test_room_nonexistent');
+    game.addPlayer('p1');
+    game.start();
+    game.processRestart();
+
+    const initialState = game.gameState;
+    const initialPaddleCount = game.paddles.length;
+
+    // Try to remove player that doesn't exist
+    game.removePlayer('nonexistent_socket');
+
+    assert.equal(game.gameState, initialState, 'Game state should not change');
+    assert.equal(game.paddles.length, initialPaddleCount, 'Paddle count should not change');
+
+    console.log('✅ Passed: Removing non-existent player has no effect.');
+    game.stop();
+}
+
+testPlayerDisconnectTerminatesGame();
+testDisconnectRemovesPaddle();
+testDisconnectEmitsTerminatedEvent();
+testDisconnectDuringScoring();
+testDisconnectNonExistentPlayer();
+
 console.log('--- All Gameplay Tests Passed ---');

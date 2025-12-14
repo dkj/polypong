@@ -47,9 +47,12 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => {
       console.log('user disconnected', socket.id);
       game.removePlayer(socket.id);
-      if (game.players.size === 0) {
-        // Optional: Clean up empty rooms after a delay?
-        // For now keep it simple.
+
+      // Clean up the game if it's terminated or no players remain
+      if (game.gameState === 'TERMINATED' || game.players.size === 0) {
+        game.stop();
+        games.delete(roomId);
+        console.log(`Game for room ${roomId} cleaned up`);
       }
     });
   });

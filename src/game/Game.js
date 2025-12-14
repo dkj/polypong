@@ -37,11 +37,15 @@ export class Game {
         this.keys = {};
         window.addEventListener('keydown', (e) => {
             this.keys[e.code] = true;
-            if ((e.code === 'Space' || e.code === 'Enter') && this.gameState === 'SCORING') {
-                if (this.socket) {
-                    this.socket.emit('requestRestart');
-                } else {
-                    this.resetLocalGame();
+            if ((e.code === 'Space' || e.code === 'Enter')) {
+                if (this.gameState === 'SCORING') {
+                    if (this.socket) {
+                        this.socket.emit('requestRestart');
+                    } else {
+                        this.resetLocalGame();
+                    }
+                } else if (this.gameState === 'TERMINATED' && this.socket) {
+                    this.rejoinMultiplayer();
                 }
             }
         });
@@ -63,6 +67,8 @@ export class Game {
                 } else {
                     this.resetLocalGame();
                 }
+            } else if (this.gameState === 'TERMINATED' && this.socket) {
+                this.rejoinMultiplayer();
             }
         });
         window.addEventListener('touchstart', () => {
@@ -73,6 +79,8 @@ export class Game {
                 } else {
                     this.resetLocalGame();
                 }
+            } else if (this.gameState === 'TERMINATED' && this.socket) {
+                this.rejoinMultiplayer();
             }
         });
 
@@ -173,6 +181,35 @@ export class Game {
                 this.audio.playBounce();
             }
         });
+
+        this.socket.on('gameTerminated', (data) => {
+            this.gameState = 'TERMINATED';
+            this.terminationReason = data.reason;
+            this.lastScore = data.lastScore;
+            this.stateBuffer = [];
+        });
+
+        // Store roomId for potential rejoin
+        this.currentRoomId = roomId;
+    }
+
+    rejoinMultiplayer() {
+        if (!this.currentRoomId) return;
+
+        // Disconnect old socket
+        if (this.socket) {
+            this.socket.disconnect();
+            this.socket = null;
+        }
+
+        // Reset state
+        this.playerIndex = -1;
+        this.gameState = 'SCORING';
+        this.terminationReason = null;
+        this.stateBuffer = [];
+
+        // Reconnect
+        this.startMultiplayer(this.currentRoomId);
     }
 
     handleTouch(e) {
@@ -648,6 +685,28 @@ export class Game {
             this.ctx.font = '24px Inter, sans-serif';
             // this.ctx.fillText(`Restarting in ${Math.ceil(this.scoreDisplayTimer)}...`, this.canvas.width / 2, this.canvas.height / 2 + 60);
             this.ctx.fillText(`CLICK OR PRESS SPACE TO RESTART`, this.canvas.width / 2, this.canvas.height / 2 + 60);
+        } else if (this.gameState === 'TERMINATED') {
+            // Game terminated overlay (player left, etc.)
+            this.ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+            this.ctx.fillStyle = '#ef4444'; // Red color for termination
+            this.ctx.shadowColor = '#ef4444';
+            this.ctx.shadowBlur = 20;
+            this.ctx.font = 'bold 48px Inter, sans-serif';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText("GAME ENDED", this.canvas.width / 2, this.canvas.height / 2 - 50);
+
+            this.ctx.fillStyle = '#fff';
+            this.ctx.font = 'bold 28px Inter, sans-serif';
+            this.ctx.fillText(this.terminationReason || 'A player disconnected', this.canvas.width / 2, this.canvas.height / 2 + 10);
+
+            this.ctx.font = '24px Inter, sans-serif';
+            this.ctx.fillText(`FINAL SCORE: ${this.lastScore} SECONDS`, this.canvas.width / 2, this.canvas.height / 2 + 60);
+
+            this.ctx.fillStyle = '#94a3b8';
+            this.ctx.font = '20px Inter, sans-serif';
+            this.ctx.fillText('CLICK OR PRESS SPACE TO REJOIN', this.canvas.width / 2, this.canvas.height / 2 + 110);
         }
     }
 }
