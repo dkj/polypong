@@ -4,12 +4,16 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "test": "node test/gameplay_test.js",
+    "test:physics": "node test/physics_test.js",
+    "test:browser": "playwright test",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
     "server": "node server/index.js"
   },
   "devDependencies": {
+    "@playwright/test": "^1.57.0",
     "vite": "^7.2.4"
   },
   "dependencies": {

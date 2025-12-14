@@ -151,7 +151,8 @@ export class ServerGame {
             const intersect = this.getLineIntersection(prevX, prevY, ball.x, ball.y, p1.x, p1.y, p2.x, p2.y);
 
             // 2. Point-Line Distance (Glancing Blow protection)
-            const dist = this.pointLineDist(ball.x, ball.y, p1.x, p1.y, p2.x, p2.y);
+            // 2. Point-Line Distance (Glancing Blow protection)
+            const dist = this.getDistanceFromSegment(ball, p1, p2);
             const isGlancing = dist < ball.radius + 2;
 
             if (intersect || isGlancing) {
@@ -161,6 +162,9 @@ export class ServerGame {
                 let checkPoint = ball;
                 if (intersect) {
                     checkPoint = intersect;
+                    // Snap ball to collision point to prevent tunneling!
+                    ball.x = checkPoint.x;
+                    ball.y = checkPoint.y;
                 } else {
                     // Project ball onto line segment for glancing check
                     checkPoint = this.getClosestPointOnSegment(p1, p2, ball);
@@ -234,8 +238,18 @@ export class ServerGame {
         return { x: p1.x + t * edgeX, y: p1.y + t * edgeY };
     }
 
-    pointLineDist(x0, y0, x1, y1, x2, y2) {
-        return Math.abs((x2 - x1) * (y1 - y0) - (x1 - x0) * (y2 - y1)) / Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
+    getDistanceFromSegment(p, p1, p2) {
+        const edgeX = p2.x - p1.x;
+        const edgeY = p2.y - p1.y;
+        const len2 = edgeX * edgeX + edgeY * edgeY;
+        if (len2 === 0) return Math.sqrt((p.x - p1.x) ** 2 + (p.y - p1.y) ** 2);
+
+        let t = ((p.x - p1.x) * edgeX + (p.y - p1.y) * edgeY) / len2;
+        t = Math.max(0, Math.min(1, t));
+
+        const closeX = p1.x + t * edgeX;
+        const closeY = p1.y + t * edgeY;
+        return Math.sqrt((p.x - closeX) ** 2 + (p.y - closeY) ** 2);
     }
 
     checkPaddleHit(point, p1, p2, paddle, graceMultiplier = 1.0) {

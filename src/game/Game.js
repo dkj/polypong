@@ -335,6 +335,9 @@ export class Game {
             return;
         }
 
+        const prevBallX = this.ball.x;
+        const prevBallY = this.ball.y;
+
         this.timeElapsed += dt;
         this.score += dt; // Score is time in seconds
 
@@ -366,10 +369,10 @@ export class Game {
 
         if (dir !== 0) this.paddles[0].move(dir, dt);
 
-        this.checkCollisions();
+        this.checkCollisions(prevBallX, prevBallY);
     }
 
-    checkCollisions() {
+    checkCollisions(prevX, prevY) {
         const vertices = this.polygon.vertices;
         const ball = this.ball;
         let collided = false;
@@ -378,15 +381,32 @@ export class Game {
             const p1 = vertices[i];
             const p2 = vertices[(i + 1) % vertices.length];
 
-            const dist = this.pointLineDist(ball.x, ball.y, p1.x, p1.y, p2.x, p2.y);
+            // 1. Segment Intersection (Tunneling Prevention)
+            const intersect = this.getLineIntersection(prevX, prevY, ball.x, ball.y, p1.x, p1.y, p2.x, p2.y);
 
-            if (dist < ball.radius + 2) {
+            // 2. Point-Line Distance (Glancing Blow protection)
+            const dist = this.getDistanceFromSegment(ball, p1, p2);
+            const isGlancing = dist < ball.radius + 2;
+
+            if (intersect || isGlancing) {
+                let checkPoint = ball;
+                if (intersect) {
+                    checkPoint = intersect;
+                    // Snap ball to collision point to prevent tunneling!
+                    ball.x = checkPoint.x;
+                    ball.y = checkPoint.y;
+                } else {
+                    checkPoint = this.getClosestPointOnSegment(p1, p2, ball);
+                }
+
                 const hasPaddle = this.paddles.some(p => p.edgeIndex === i);
 
                 if (hasPaddle) {
                     const paddle = this.paddles.find(p => p.edgeIndex === i);
-                    if (this.checkPaddleHit(ball, p1, p2, paddle)) {
+                    // Use 1.1 grace multiplier (10% extra width) to be lenient to player
+                    if (this.checkPaddleHit(checkPoint, p1, p2, paddle, 1.1)) {
                         this.reflectBall(p1, p2);
+                        this.pushBallOut(p1, p2);
                         this.audio.playBounce();
                         collided = true;
                     } else {
@@ -396,6 +416,7 @@ export class Game {
                     }
                 } else {
                     this.reflectBall(p1, p2);
+                    this.pushBallOut(p1, p2);
                     this.audio.playBounce();
                     collided = true;
                 }
@@ -404,18 +425,62 @@ export class Game {
         }
     }
 
-    pointLineDist(x0, y0, x1, y1, x2, y2) {
-        return Math.abs((x2 - x1) * (y1 - y0) - (x1 - x0) * (y2 - y1)) / Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
+    getLineIntersection(x1, y1, x2, y2, x3, y3, x4, y4) {
+        const denom = (y4 - y3) * (x2 - x1) - (x4 - x3) * (y2 - y1);
+        if (denom === 0) return null;
+        const ua = ((x4 - x3) * (y1 - y3) - (y4 - y3) * (x1 - x3)) / denom;
+        const ub = ((x2 - x1) * (y1 - y3) - (y2 - y1) * (x1 - x3)) / denom;
+        if (ua >= 0 && ua <= 1 && ub >= 0 && ub <= 1) {
+            return { x: x1 + ua * (x2 - x1), y: y1 + ua * (y2 - y1) };
+        }
+        return null;
     }
 
-    checkPaddleHit(ball, p1, p2, paddle) {
+    getDistanceFromSegment(p, p1, p2) {
+        const edgeX = p2.x - p1.x;
+        const edgeY = p2.y - p1.y;
+        const len2 = edgeX * edgeX + edgeY * edgeY;
+        if (len2 === 0) return Math.sqrt((p.x - p1.x) ** 2 + (p.y - p1.y) ** 2);
+
+        let t = ((p.x - p1.x) * edgeX + (p.y - p1.y) * edgeY) / len2;
+        t = Math.max(0, Math.min(1, t));
+
+        const closeX = p1.x + t * edgeX;
+        const closeY = p1.y + t * edgeY;
+        return Math.sqrt((p.x - closeX) ** 2 + (p.y - closeY) ** 2);
+    }
+
+    getClosestPointOnSegment(p1, p2, p) {
+        const edgeX = p2.x - p1.x;
+        const edgeY = p2.y - p1.y;
+        const len2 = edgeX * edgeX + edgeY * edgeY;
+        let t = ((p.x - p1.x) * edgeX + (p.y - p1.y) * edgeY) / len2;
+        t = Math.max(0, Math.min(1, t));
+        return { x: p1.x + t * edgeX, y: p1.y + t * edgeY };
+    }
+
+    checkPaddleHit(ball, p1, p2, paddle, graceMultiplier = 1.0) {
         const edgeX = p2.x - p1.x;
         const edgeY = p2.y - p1.y;
         const len2 = edgeX * edgeX + edgeY * edgeY;
         const t = ((ball.x - p1.x) * edgeX + (ball.y - p1.y) * edgeY) / len2;
-        const pStart = paddle.position - paddle.width / 2;
-        const pEnd = paddle.position + paddle.width / 2;
+
+        const w = paddle.width * graceMultiplier;
+        const pStart = paddle.position - w / 2;
+        const pEnd = paddle.position + w / 2;
         return t >= pStart && t <= pEnd;
+    }
+
+    pushBallOut(p1, p2) {
+        let nx = -(p2.y - p1.y);
+        let ny = (p2.x - p1.x);
+        const len = Math.sqrt(nx * nx + ny * ny);
+        nx /= len;
+        ny /= len;
+
+        // Push 2 units along normal
+        this.ball.x += nx * 2;
+        this.ball.y += ny * 2;
     }
 
     getPlayerColor(index, alpha = 1) {
