@@ -22,7 +22,7 @@ const io = new Server(httpServer, {
 const distPath = path.resolve(__dirname, '../dist');
 if (fs.existsSync(distPath)) {
   app.use(express.static(distPath));
-  app.get('*', (_req, res) => {
+  app.get(/^.*$/, (_req, res) => {
     res.sendFile(path.join(distPath, 'index.html'));
   });
 } else {
