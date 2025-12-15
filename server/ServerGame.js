@@ -76,8 +76,9 @@ export class ServerGame {
         // Actually paddles array might not be ordered by edgeIndex if we removed some?
         // I used edgeIndex = paddles.length.
         // Let's assume paddles[index] corresponds if we don't delete.
-        if (this.paddles[index]) {
-            this.paddles[index].moveDirection = dir; // Storing input state
+        const paddle = this.paddles.find(p => p.edgeIndex === index);
+        if (paddle) {
+            paddle.moveDirection = dir; // Storing input state
         }
     }
 
