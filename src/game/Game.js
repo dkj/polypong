@@ -197,6 +197,18 @@ export class Game {
         this.currentRoomId = roomId;
     }
 
+    stopMultiplayer() {
+        console.log('Stopping multiplayer, reverting to local...');
+        if (this.socket) {
+            this.socket.disconnect();
+            this.socket = null;
+        }
+        this.mode = 'local';
+        this.playerIndex = -1;
+        this.currentRoomId = null;
+        this.resetLocalGame();
+    }
+
     rejoinMultiplayer() {
         if (!this.currentRoomId) return;
 
