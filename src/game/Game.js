@@ -395,7 +395,7 @@ export class Game {
         this.timeElapsed += dt;
         this.score += dt; // Score is time in seconds
 
-        this.difficulty = 1 + this.timeElapsed / 30;
+        this.difficulty = 1 + this.timeElapsed / 90;
 
         this.audio.setDifficulty(this.difficulty);
 

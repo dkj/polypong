@@ -122,7 +122,7 @@ export class ServerGame {
         this.timeElapsed += dt;
         this.score += dt;
 
-        this.difficulty = 1 + this.timeElapsed / 30;
+        this.difficulty = 1 + this.timeElapsed / 90;
 
         this.polygon.rotationSpeed = 0.125 * this.difficulty * this.rotationDirection;
         this.polygon.update(dt);
