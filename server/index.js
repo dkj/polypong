@@ -12,12 +12,7 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const httpServer = createServer(app);
-const io = new Server(httpServer, {
-  cors: {
-    origin: "*",
-    methods: ["GET", "POST"]
-  }
-});
+const io = new Server(httpServer);
 
 const distPath = path.resolve(__dirname, '../dist');
 if (fs.existsSync(distPath)) {
