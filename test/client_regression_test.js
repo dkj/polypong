@@ -80,6 +80,8 @@ function testMultiplayerToLocalPaddleReset() {
 
     assert.equal(game.paddles.length, 1, 'Only 1 paddle should remain after reverting to local');
     assert.equal(game.paddles[0].edgeIndex, 0, 'Remaining paddle should be at edge 0');
+    assert.equal(game.gameState, 'SCORING', 'Game should be in SCORING (frozen) state after stopping multiplayer');
+    assert.equal(game.hasPlayed, false, 'hasPlayed should be false to show Welcome screen');
 
     console.log('✅ Passed: Multiplayer to local paddle reset.');
 }

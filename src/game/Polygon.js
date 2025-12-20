@@ -19,6 +19,11 @@ export class Polygon {
         }
     }
 
+    updateSides(sides) {
+        this.sides = sides;
+        this.updateVertices();
+    }
+
     update(dt) {
         // Rotation speed increases over time
         this.rotation += this.rotationSpeed * dt;

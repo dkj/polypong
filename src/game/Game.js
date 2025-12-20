@@ -184,8 +184,6 @@ export class Game extends BaseGame {
             this.playerIndex = data.playerIndex;
             if (this.polygon.sides !== data.sides) {
                 this.polygon.updateSides(data.sides);
-                this.polygon.sides = data.sides;
-                this.polygon.updateVertices();
             }
         });
 
@@ -261,7 +259,16 @@ export class Game extends BaseGame {
         this.mode = 'local';
         this.playerIndex = -1;
         this.currentRoomId = null;
-        this.resetLocalGame();
+
+        // Reset to initial menu state instead of immediately starting
+        this.gameState = 'SCORING';
+        this.hasPlayed = false;
+        this.showMenu('START GAME');
+
+        // Reset polygon and paddles for local play
+        this.polygon.updateSides(5);
+        this.paddles = [new Paddle(0)];
+        this.paddles[0].width = 0.5;
     }
 
     rejoinMultiplayer() {
