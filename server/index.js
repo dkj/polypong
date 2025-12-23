@@ -12,8 +12,60 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const httpServer = createServer(app);
-const io = new Server(httpServer);
 
+// Get Fly.io instance information
+const FLY_ALLOC_ID = process.env.FLY_ALLOC_ID || null;
+const FLY_MACHINE_ID = process.env.FLY_MACHINE_ID || null;
+const instanceId = FLY_MACHINE_ID || FLY_ALLOC_ID || 'local';
+
+console.log(`Running on instance: ${instanceId}`);
+
+// Middleware to handle Fly.io instance routing for WebSocket upgrades
+app.use((req, res, next) => {
+  // Check if this is a WebSocket upgrade request
+  const isWebSocketUpgrade = req.headers.upgrade === 'websocket';
+
+  if (isWebSocketUpgrade) {
+    const targetInstance = req.query.instance || req.headers['x-fly-instance'];
+
+    // If a specific instance is requested and we're not it, replay to the correct instance
+    if (targetInstance && targetInstance !== instanceId && FLY_MACHINE_ID) {
+      console.log(`Replaying WebSocket connection from ${instanceId} to ${targetInstance}`);
+      res.set('fly-replay', `instance=${targetInstance}`);
+      return res.status(307).end();
+    }
+  }
+
+  next();
+});
+
+const io = new Server(httpServer, {
+  // Allow query parameters to pass through
+  allowRequest: (req, callback) => {
+    const targetInstance = req._query?.instance || req.headers['x-fly-instance'];
+
+    // If a specific instance is requested and we're not it, reject
+    if (targetInstance && targetInstance !== instanceId && FLY_MACHINE_ID) {
+      console.log(`Rejecting WebSocket: wrong instance (want ${targetInstance}, running ${instanceId})`);
+      callback('Wrong instance', false);
+      return;
+    }
+
+    callback(null, true);
+  }
+});
+
+const games = new Map(); // roomId -> ServerGame
+
+// API endpoints (must be defined BEFORE static file serving)
+app.get('/api/instance', (req, res) => {
+  res.json({
+    instanceId,
+    isFlyInstance: !!FLY_MACHINE_ID
+  });
+});
+
+// Static file serving (catch-all routes last)
 const distPath = path.resolve(__dirname, '../dist');
 if (fs.existsSync(distPath)) {
   app.use(express.static(distPath));
@@ -24,17 +76,31 @@ if (fs.existsSync(distPath)) {
   console.warn(`Static assets not found at ${distPath}. Only socket services will be available.`);
 }
 
-const games = new Map(); // roomId -> ServerGame
-
 io.on('connection', (socket) => {
-  console.log('a user connected', socket.id);
+  console.log(`User connected: ${socket.id} on instance ${instanceId}`);
 
-  socket.on('joinRoom', (roomId) => {
+  socket.on('joinRoom', (data) => {
+    // Support both old string format and new object format
+    const roomId = typeof data === 'string' ? data : data.roomId;
+    const requestedInstance = typeof data === 'object' ? data.instance : null;
+
+    // Verify we're on the right instance for this room
+    if (requestedInstance && requestedInstance !== instanceId && FLY_MACHINE_ID) {
+      console.warn(`Room ${roomId} attempting to join wrong instance. Expected ${requestedInstance}, running ${instanceId}`);
+      socket.emit('error', {
+        message: 'Connected to wrong instance',
+        expectedInstance: requestedInstance,
+        currentInstance: instanceId
+      });
+      socket.disconnect();
+      return;
+    }
+
     socket.join(roomId);
-    console.log(`User ${socket.id} joined room ${roomId}`);
+    console.log(`User ${socket.id} joined room ${roomId} on instance ${instanceId}`);
 
     if (!games.has(roomId)) {
-      console.log(`Creating new game for room ${roomId}`);
+      console.log(`Creating new game for room ${roomId} on instance ${instanceId}`);
       const game = new ServerGame(io, roomId);
       games.set(roomId, game);
       game.start();
@@ -43,7 +109,11 @@ io.on('connection', (socket) => {
     const game = games.get(roomId);
     const playerIndex = game.addPlayer(socket.id);
 
-    socket.emit('init', { playerIndex, sides: game.polygon.sides });
+    socket.emit('init', {
+      playerIndex,
+      sides: game.polygon.sides,
+      instanceId // Send back the instance ID for confirmation
+    });
 
     // Handle input for this specific game
     socket.on('input', (data) => {
@@ -53,7 +123,6 @@ io.on('connection', (socket) => {
     socket.on('requestRestart', () => {
       if (game) game.processRestart();
     });
-
 
     // Handle disconnect specifically for this room context
     socket.on('disconnect', () => {
@@ -75,4 +144,5 @@ io.on('connection', (socket) => {
 const PORT = resolvePort();
 httpServer.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
+  console.log(`Instance ID: ${instanceId}`);
 });
