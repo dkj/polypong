@@ -14,11 +14,10 @@ const app = express();
 const httpServer = createServer(app);
 
 // Get Fly.io instance information
-const FLY_ALLOC_ID = process.env.FLY_ALLOC_ID || null;
-const FLY_MACHINE_ID = process.env.FLY_MACHINE_ID || null;
-const instanceId = FLY_MACHINE_ID || FLY_ALLOC_ID || 'local';
+const instanceId = process.env.FLY_MACHINE_ID || process.env.FLY_ALLOC_ID || 'local';
+const isFlyInstance = !!process.env.FLY_MACHINE_ID;
 
-console.log(`Running on instance: ${instanceId}`);
+console.log(`Running on instance: ${instanceId}${isFlyInstance ? ' (Fly.io)' : ''}`);
 
 // Middleware to handle Fly.io instance routing for WebSocket upgrades
 app.use((req, res, next) => {
@@ -31,7 +30,7 @@ app.use((req, res, next) => {
     // If a specific instance is requested and we're not it, replay to the correct instance
     if (targetInstance && targetInstance !== instanceId && FLY_MACHINE_ID) {
       console.log(`Replaying WebSocket connection from ${instanceId} to ${targetInstance}`);
-      res.set('fly-replay', `instance=${targetInstance}`);
+      res.set('fly-replay', `instance = ${targetInstance}`);
       return res.status(307).end();
     }
   }
@@ -46,7 +45,7 @@ const io = new Server(httpServer, {
 
     // If a specific instance is requested and we're not it, reject
     if (targetInstance && targetInstance !== instanceId && FLY_MACHINE_ID) {
-      console.log(`Rejecting WebSocket: wrong instance (want ${targetInstance}, running ${instanceId})`);
+      console.log(`Rejecting WebSocket: wrong instance(want ${targetInstance}, running ${instanceId})`);
       callback('Wrong instance', false);
       return;
     }
@@ -59,10 +58,7 @@ const games = new Map(); // roomId -> ServerGame
 
 // API endpoints (must be defined BEFORE static file serving)
 app.get('/api/instance', (req, res) => {
-  res.json({
-    instanceId,
-    isFlyInstance: !!FLY_MACHINE_ID
-  });
+  res.json({ instanceId, isFlyInstance });
 });
 
 // Static file serving (catch-all routes last)
@@ -73,7 +69,7 @@ if (fs.existsSync(distPath)) {
     res.sendFile(path.join(distPath, 'index.html'));
   });
 } else {
-  console.warn(`Static assets not found at ${distPath}. Only socket services will be available.`);
+  console.warn(`Static assets not found at ${distPath}.Only socket services will be available.`);
 }
 
 io.on('connection', (socket) => {
@@ -86,7 +82,7 @@ io.on('connection', (socket) => {
 
     // Verify we're on the right instance for this room
     if (requestedInstance && requestedInstance !== instanceId && FLY_MACHINE_ID) {
-      console.warn(`Room ${roomId} attempting to join wrong instance. Expected ${requestedInstance}, running ${instanceId}`);
+      console.warn(`Room ${roomId} attempting to join wrong instance.Expected ${requestedInstance}, running ${instanceId}`);
       socket.emit('error', {
         message: 'Connected to wrong instance',
         expectedInstance: requestedInstance,
@@ -100,7 +96,7 @@ io.on('connection', (socket) => {
     console.log(`User ${socket.id} joined room ${roomId} on instance ${instanceId}`);
 
     if (!games.has(roomId)) {
-      console.log(`Creating new game for room ${roomId} on instance ${instanceId}`);
+      console.log(`Creating new game for room ${roomId} on instance ${instanceId} `);
       const game = new ServerGame(io, roomId);
       games.set(roomId, game);
       game.start();
@@ -134,7 +130,7 @@ io.on('connection', (socket) => {
         if (game.players.size === 0) {
           game.stop();
           games.delete(roomId);
-          console.log(`Game for room ${roomId} cleaned up (empty)`);
+          console.log(`Game for room ${roomId} cleaned up(empty)`);
         }
       }
     });
