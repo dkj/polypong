@@ -14,7 +14,7 @@ const app = express();
 const httpServer = createServer(app);
 
 // Get Fly.io instance information
-const instanceId = process.env.FLY_MACHINE_ID || process.env.FLY_ALLOC_ID || 'local';
+const instanceId = process.env.FLY_MACHINE_ID || 'local';
 const isFlyInstance = !!process.env.FLY_MACHINE_ID;
 
 console.log(`Running on instance: ${instanceId}${isFlyInstance ? ' (Fly.io)' : ''}`);
@@ -28,7 +28,7 @@ app.use((req, res, next) => {
     const targetInstance = req.query.instance || req.headers['x-fly-instance'];
 
     // If a specific instance is requested and we're not it, replay to the correct instance
-    if (targetInstance && targetInstance !== instanceId && FLY_MACHINE_ID) {
+    if (targetInstance && targetInstance !== instanceId && isFlyInstance) {
       console.log(`Replaying WebSocket connection from ${instanceId} to ${targetInstance}`);
       res.set('fly-replay', `instance = ${targetInstance}`);
       return res.status(307).end();
@@ -44,7 +44,7 @@ const io = new Server(httpServer, {
     const targetInstance = req._query?.instance || req.headers['x-fly-instance'];
 
     // If a specific instance is requested and we're not it, reject
-    if (targetInstance && targetInstance !== instanceId && FLY_MACHINE_ID) {
+    if (targetInstance && targetInstance !== instanceId) {
       console.log(`Rejecting WebSocket: wrong instance(want ${targetInstance}, running ${instanceId})`);
       callback('Wrong instance', false);
       return;
@@ -81,7 +81,7 @@ io.on('connection', (socket) => {
     const requestedInstance = typeof data === 'object' ? data.instance : null;
 
     // Verify we're on the right instance for this room
-    if (requestedInstance && requestedInstance !== instanceId && FLY_MACHINE_ID) {
+    if (requestedInstance && requestedInstance !== instanceId) {
       console.warn(`Room ${roomId} attempting to join wrong instance.Expected ${requestedInstance}, running ${instanceId}`);
       socket.emit('error', {
         message: 'Connected to wrong instance',
