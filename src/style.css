@@ -388,4 +388,26 @@ canvas#gameCanvas {
     padding: 24px;
     gap: 20px;
   }
+
+  .copy-area {
+    flex-direction: column;
+    padding: 8px;
+    gap: 12px;
+  }
+
+  .btn-copy {
+    width: 100%;
+    padding: 12px;
+    font-size: 1rem;
+  }
+
+  .social-links {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .social-btn {
+    width: 44px;
+    height: 44px;
+  }
 }
