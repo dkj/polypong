@@ -45,6 +45,7 @@ export class ShareManager {
 
         return {
             twitter: `https://twitter.com/intent/tweet?url=${encodedUrl}&text=${encodedText}`,
+            bluesky: `https://bsky.app/intent/compose?text=${encodedText}%20${encodedUrl}`,
             facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`,
             whatsapp: `https://api.whatsapp.com/send?text=${encodedText}%20${encodedUrl}`
         };
