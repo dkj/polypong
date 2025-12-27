@@ -178,6 +178,19 @@ test.describe('Sharing Functionality', () => {
         expect(gameState).toBe('SCORING');
     });
 
+    test('should auto-close modal when game starts', async ({ page }) => {
+        await page.locator('#shareMenuBtn').click();
+        const modal = page.locator('#share-modal');
+        await expect(modal).toHaveClass(/visible/);
+
+        // Simulate game starting (e.g. by another player)
+        await page.evaluate(() => {
+            window.game.setGameState('COUNTDOWN');
+        });
+
+        await expect(modal).not.toHaveClass(/visible/);
+    });
+
     test('should close modal', async ({ page }) => {
         await page.locator('#shareMenuBtn').click();
         const modal = page.locator('#share-modal');

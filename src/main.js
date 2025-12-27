@@ -65,6 +65,14 @@ const canvas = document.querySelector('#gameCanvas');
 const game = new Game(canvas);
 const shareManager = new ShareManager();
 window.game = game;
+
+// Auto-close modal when game starts
+game.onStateChange = (state) => {
+  if (state === 'COUNTDOWN' || state === 'PLAYING') {
+    closeShareModal();
+  }
+};
+
 game.start();
 
 const modal = document.getElementById('share-modal');

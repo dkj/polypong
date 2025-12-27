@@ -17,11 +17,10 @@ export class Game extends BaseGame {
         this.socket = null;
         this.playerIndex = -1;
 
-        // UI State
-        this.scoreDisplayTimer = 0;
-        this.lastTime = 0;
         this.finalTime = 0;
         this.hasPlayed = false;
+
+        this.onStateChange = null;
 
         window.addEventListener('resize', () => this.resize());
 
@@ -145,8 +144,17 @@ export class Game extends BaseGame {
         this.flashColor = color;
     }
 
+    setGameState(newState) {
+        if (this.gameState !== newState) {
+            this.gameState = newState;
+            if (this.onStateChange) {
+                this.onStateChange(newState);
+            }
+        }
+    }
+
     triggerScore(finalScore, finalTime) {
-        this.gameState = 'SCORING';
+        this.setGameState('SCORING');
         this.lastScore = finalScore;
         this.finalTime = finalTime ?? Math.floor(this.timeElapsed) ?? 0;
         this.scoreDisplayTimer = 5.0; // 5 seconds celebration
@@ -162,6 +170,7 @@ export class Game extends BaseGame {
 
     resetLocalGame() {
         this.resetState(); // BaseGame reset
+        this.setGameState('COUNTDOWN');
         // Local specific override if needed? BaseGame randomizes rotation and sets width.
         // BaseGame does NOT set paddle position or count.
         // We assume paddles array is managed. 
@@ -222,7 +231,7 @@ export class Game extends BaseGame {
             }
 
             this.difficulty = state.difficulty;
-            this.gameState = state.gameState;
+            this.setGameState(state.gameState);
             this.score = state.score;
             this.lastScore = state.lastScore;
             this.finalTime = state.finalTime || 0;
@@ -267,7 +276,7 @@ export class Game extends BaseGame {
         });
 
         this.socket.on('gameTerminated', (data) => {
-            this.gameState = 'TERMINATED';
+            this.setGameState('TERMINATED');
             this.terminationReason = data.reason;
             this.lastScore = data.lastScore;
             this.finalTime = data.finalTime || 0;
@@ -300,7 +309,7 @@ export class Game extends BaseGame {
         this.currentInstanceId = null;
 
         // Reset to initial menu state instead of immediately starting
-        this.gameState = 'SCORING';
+        this.setGameState('SCORING');
         this.hasPlayed = false;
         this.showMenu('START GAME');
 
@@ -317,7 +326,7 @@ export class Game extends BaseGame {
             this.socket = null;
         }
         this.playerIndex = -1;
-        this.gameState = 'SCORING';
+        this.setGameState('SCORING');
         this.terminationReason = null;
         this.stateBuffer = [];
         this.startMultiplayer(this.currentRoomId, this.currentInstanceId);
