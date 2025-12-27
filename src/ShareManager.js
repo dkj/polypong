@@ -13,7 +13,11 @@ export class ShareManager {
             url: url
         };
 
-        if (navigator.share && navigator.canShare && navigator.canShare(shareData)) {
+        // More permissive detection: prioritize navigator.share.
+        // Only use canShare as a secondary check if it's actually provided by the browser (Safari doesn't).
+        const canUseNative = navigator.share && (!navigator.canShare || navigator.canShare(shareData));
+
+        if (canUseNative) {
             try {
                 await navigator.share(shareData);
                 return { success: true, method: 'native' };

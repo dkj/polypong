@@ -76,6 +76,32 @@ test.describe('Sharing Functionality', () => {
         expect(sharedData.title).toBe('PolyPongon');
     });
 
+    test('should trigger web share API even if canShare is missing (Safari style)', async ({ page }) => {
+        // Mock navigator.share but NO navigator.canShare
+        await page.addInitScript(() => {
+            const mockShare = async (data) => {
+                window.lastSharedData = data;
+            };
+            Object.defineProperty(navigator, 'share', {
+                value: mockShare,
+                configurable: true
+            });
+            // Ensure canShare is missing
+            Object.defineProperty(navigator, 'canShare', {
+                value: undefined,
+                configurable: true
+            });
+        });
+
+        await page.goto('/');
+        await page.locator('#shareMenuBtn').click();
+        await page.locator('#webShareBtn').click();
+
+        await page.waitForFunction(() => window.lastSharedData !== undefined);
+        const sharedData = await page.evaluate(() => window.lastSharedData);
+        expect(sharedData.title).toBe('PolyPongon');
+    });
+
     test('should close modal on Escape key', async ({ page }) => {
         await page.locator('#shareMenuBtn').click();
         const modal = page.locator('#share-modal');
