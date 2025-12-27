@@ -28,10 +28,18 @@ export class Game extends BaseGame {
         // Input
         this.keys = {};
         window.addEventListener('keydown', (e) => {
+            // Ignore game inputs if a modal is open
+            if (document.querySelector('.modal-overlay.visible')) return;
+
             this.keys[e.code] = true;
+
+            // Restart actions: only handle if target is NOT an interactive element (buttons handle their own)
             if ((e.code === 'Space' || e.code === 'Enter')) {
-                this.audio.init();
-                this.handleRestartAction();
+                const isUIElement = ['BUTTON', 'A', 'INPUT', 'TEXTAREA'].includes(e.target.tagName);
+                if (!isUIElement) {
+                    this.audio.init();
+                    this.handleRestartAction();
+                }
             }
         });
         window.addEventListener('keyup', (e) => this.keys[e.code] = false);

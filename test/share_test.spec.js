@@ -76,6 +76,66 @@ test.describe('Sharing Functionality', () => {
         expect(sharedData.title).toBe('PolyPongon');
     });
 
+    test('should close modal on Escape key', async ({ page }) => {
+        await page.locator('#shareMenuBtn').click();
+        const modal = page.locator('#share-modal');
+        await expect(modal).toHaveClass(/visible/);
+
+        await page.keyboard.press('Escape');
+        await expect(modal).not.toHaveClass(/visible/);
+    });
+
+    test('should close modal on back button', async ({ page }) => {
+        await page.locator('#shareMenuBtn').click();
+        const modal = page.locator('#share-modal');
+        await expect(modal).toHaveClass(/visible/);
+
+        await page.goBack();
+        await expect(modal).not.toHaveClass(/visible/);
+    });
+
+    test('should not start game when closing modal with Enter', async ({ page }) => {
+        // Set game to SCORING state so Enter would normally start it
+        await page.evaluate(() => {
+            window.game.gameState = 'SCORING';
+            window.game.showMenu('START GAME');
+        });
+
+        await page.locator('#shareMenuBtn').click();
+        const modal = page.locator('#share-modal');
+        await expect(modal).toHaveClass(/visible/);
+
+        // Focus close button and press Enter
+        const closeBtn = page.locator('#closeShareBtn');
+        await closeBtn.focus();
+        await page.keyboard.press('Enter');
+
+        await expect(modal).not.toHaveClass(/visible/);
+
+        // Game should still be in SCORING state, not COUNTDOWN or PLAYING
+        const gameState = await page.evaluate(() => window.game.gameState);
+        expect(gameState).toBe('SCORING');
+    });
+
+    test('should not start game when opening modal with Enter', async ({ page }) => {
+        // Set game to SCORING state so Enter would normally start it
+        await page.evaluate(() => {
+            window.game.gameState = 'SCORING';
+            window.game.showMenu('START GAME');
+        });
+
+        const shareBtn = page.locator('#shareMenuBtn');
+        await shareBtn.focus();
+        await page.keyboard.press('Enter');
+
+        const modal = page.locator('#share-modal');
+        await expect(modal).toHaveClass(/visible/);
+
+        // Game should still be in SCORING state
+        const gameState = await page.evaluate(() => window.game.gameState);
+        expect(gameState).toBe('SCORING');
+    });
+
     test('should close modal', async ({ page }) => {
         await page.locator('#shareMenuBtn').click();
         const modal = page.locator('#share-modal');

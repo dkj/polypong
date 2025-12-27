@@ -77,11 +77,47 @@ function openShareModal(url, isInvite = false) {
   document.getElementById('shareWhatsapp').href = links.whatsapp;
 
   modal.classList.add('visible');
+
+  // Push state to history for back button support
+  window.history.pushState({ modal: 'share' }, '');
+}
+
+function closeShareModal() {
+  if (modal.classList.contains('visible')) {
+    modal.classList.remove('visible');
+    // If we have a modal state in history, go back
+    if (window.history.state?.modal === 'share') {
+      window.history.back();
+    }
+  }
 }
 
 // Event Listeners for Modal
-document.getElementById('closeShareBtn').addEventListener('click', () => {
-  modal.classList.remove('visible');
+document.getElementById('closeShareBtn').addEventListener('click', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  closeShareModal();
+});
+
+// Close on background click
+modal.addEventListener('click', (e) => {
+  if (e.target === modal) {
+    closeShareModal();
+  }
+});
+
+// Close on Escape key
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    closeShareModal();
+  }
+});
+
+// Close on back button
+window.addEventListener('popstate', (e) => {
+  if (modal.classList.contains('visible') && (!e.state || e.state.modal !== 'share')) {
+    modal.classList.remove('visible');
+  }
 });
 
 const shareMenuBtn = document.getElementById('shareMenuBtn');
