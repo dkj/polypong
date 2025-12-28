@@ -45,8 +45,8 @@ test.describe('PWA Features', () => {
         expect(response.ok()).toBe(true);
         const manifest = await response.json();
 
-        expect(manifest.name).toBe('Polypong');
-        expect(manifest.short_name).toBe('Polypong');
+        expect(manifest.name).toBe('Polypongon');
+        expect(manifest.short_name).toBe('Polypongon');
         expect(manifest.display).toBe('standalone');
         expect(manifest.start_url).toBe('/');
         expect(manifest.icons.length).toBeGreaterThan(0);

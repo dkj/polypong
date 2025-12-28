@@ -12,7 +12,7 @@ test.describe('Sharing Functionality', () => {
 
         const modal = page.locator('#share-modal');
         await expect(modal).toHaveClass(/visible/);
-        await expect(page.locator('#shareTitle')).toHaveText('SHARE POLYPONGON');
+        await expect(page.locator('#shareTitle')).toHaveText('SHARE Polypongon');
         await expect(page.locator('#shareQRCanvas')).toBeVisible();
     });
 
@@ -73,7 +73,7 @@ test.describe('Sharing Functionality', () => {
         await page.waitForFunction(() => window.lastSharedData !== undefined);
 
         const sharedData = await page.evaluate(() => window.lastSharedData);
-        expect(sharedData.title).toBe('PolyPongon');
+        expect(sharedData.title).toBe('Polypongon');
     });
 
     test('should trigger web share API even if canShare is missing (Safari style)', async ({ page }) => {
@@ -99,7 +99,7 @@ test.describe('Sharing Functionality', () => {
 
         await page.waitForFunction(() => window.lastSharedData !== undefined);
         const sharedData = await page.evaluate(() => window.lastSharedData);
-        expect(sharedData.title).toBe('PolyPongon');
+        expect(sharedData.title).toBe('Polypongon');
     });
 
     test('should close modal on Escape key', async ({ page }) => {

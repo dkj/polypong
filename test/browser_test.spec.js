@@ -5,7 +5,7 @@ import { test, expect } from '@playwright/test';
 test('Game loads and displays canvas', async ({ page }) => {
     await page.goto('/');
 
-    await expect(page).toHaveTitle(/PolyPongon/i);
+    await expect(page).toHaveTitle(/Polypongon/i);
 
     const canvas = page.locator('#gameCanvas');
     await expect(canvas).toBeVisible();

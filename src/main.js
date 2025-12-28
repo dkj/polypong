@@ -6,7 +6,7 @@ import { ShareManager } from './ShareManager.js';
 document.querySelector('#app').innerHTML = `
   <canvas id="gameCanvas"></canvas>
   <div class="ui-layer">
-    <h1>POLYPONGON</h1>
+    <h1>Polypongon</h1>
   </div>
   
   <div id="game-menu" class="menu-container">
@@ -28,7 +28,7 @@ document.querySelector('#app').innerHTML = `
       <button class="modal-close" id="closeShareBtn">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
       </button>
-      <h2 class="modal-title" id="shareTitle">SHARE POLYPONGON</h2>
+      <h2 class="modal-title" id="shareTitle">SHARE Polypongon</h2>
       
       <div class="share-qr">
         <canvas id="shareQRCanvas"></canvas>
@@ -94,7 +94,7 @@ const shareUrlInput = document.getElementById('shareUrlInput');
 const qrCanvas = document.getElementById('shareQRCanvas');
 
 function openShareModal(url, isInvite = false) {
-  shareTitle.innerText = isInvite ? 'INVITE TO GAME' : 'SHARE POLYPONGON';
+  shareTitle.innerText = isInvite ? 'INVITE TO GAME' : 'SHARE Polypongon';
   shareUrlInput.value = url;
   shareManager.renderQRCode(qrCanvas, url);
 

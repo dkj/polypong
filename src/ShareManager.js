@@ -2,7 +2,7 @@ import QRCode from 'qrcode';
 
 export class ShareManager {
     constructor() {
-        this.title = 'PolyPongon';
+        this.title = 'Polypongon';
         this.text = 'For your consideration, I am sharing this polygon pong game.';
     }
 

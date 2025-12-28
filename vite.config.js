@@ -8,8 +8,8 @@ export default defineConfig({
             registerType: 'autoUpdate',
             includeAssets: ['favicon.svg', 'pwa-192x192.png', 'pwa-512x512.png'],
             manifest: {
-                name: 'Polypong',
-                short_name: 'Polypong',
+                name: 'Polypongon',
+                short_name: 'Polypongon',
                 description: 'A multi-sided pong game',
                 theme_color: '#1a1a1a',
                 background_color: '#1a1a1a',
