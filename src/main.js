@@ -1,4 +1,5 @@
 import './style.css';
+import { registerSW } from 'virtual:pwa-register';
 import { Game } from './game/Game.js';
 import { ShareManager } from './ShareManager.js';
 
@@ -65,6 +66,18 @@ const canvas = document.querySelector('#gameCanvas');
 const game = new Game(canvas);
 const shareManager = new ShareManager();
 window.game = game;
+
+// Register Service Worker for PWA
+registerSW({
+  onNeedRefresh() {
+    if (confirm('New content available. Reload?')) {
+      window.location.reload();
+    }
+  },
+  onOfflineReady() {
+    console.log('App ready to work offline');
+  },
+});
 
 // Auto-close modal when game starts
 game.onStateChange = (state) => {
