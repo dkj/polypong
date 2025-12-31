@@ -43,7 +43,6 @@ test.describe('Multiplayer Readiness', () => {
         // We'll give it a moment for the state to propagate
         await expect(async () => {
             const feedback = await page2.evaluate(() => {
-                const ctx = window.game.ctx;
                 // This is hard to check via DOM, so we check the game state object
                 return window.game.readyEdges.length;
             });
