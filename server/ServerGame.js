@@ -186,9 +186,9 @@ export class ServerGame extends BaseGame {
     }
 
     processRestart() {
-        // Disabled in multiplayer to enforce the "Ready" flow.
-        // In multiplayer, players should use the "playerReady" event.
-        // this.resetGame();
+        // Legacy restart method. Calls resetGame() directly.
+        // For multiplayer readiness flow, use toggleReady().
+        this.resetGame();
     }
 
     resetGame() {
