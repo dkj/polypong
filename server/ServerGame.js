@@ -71,19 +71,20 @@ export class ServerGame extends BaseGame {
     }
 
     checkAllReady() {
+        if (this.restarting) return;
         if (this.gameState !== 'SCORING' || this.players.size === 0) return;
+        if (this.celebrationTimer > 0) return;
 
         // Check if all players are ready
         const allReady = Array.from(this.players.values()).every(idx => this.readyEdges.has(idx));
 
         if (allReady) {
-            console.log('All players ready, starting game...');
             this.resetGame();
         }
     }
 
     terminateGame(reason) {
-        this.gameState = 'TERMINATED';
+        this.setGameState('TERMINATED');
         this.running = false;
         clearInterval(this.interval);
 
@@ -120,8 +121,14 @@ export class ServerGame extends BaseGame {
     loop() {
         try {
             const time = performance.now();
-            const dt = (time - this.lastTime) / 1000;
+            let dt = (time - this.lastTime) / 1000;
             this.lastTime = time;
+
+            // Clamp dt to prevent simulation explosion (e.g. after pauses or lags)
+            if (dt > 0.1) {
+                // console.warn(`[ServerGame] Excessive dt detected: ${dt.toFixed(4)}s. Clamping to 0.1s.`);
+                dt = 0.1;
+            }
 
             this.update(dt);
             this.broadcastState();
@@ -132,17 +139,7 @@ export class ServerGame extends BaseGame {
     }
 
     update(dt) {
-        if (this.gameState === 'SCORING') return;
-
-        const prevBallX = this.ball.x;
-        const prevBallY = this.ball.y;
-
-        super.updateGameRules(dt);
-
-        if (this.gameState === 'PLAYING') {
-            // Move Ball
-            this.ball.update(dt);
-        }
+        super.update(dt);
 
         // Update Paddles Movement (Server specific)
         this.paddles.forEach(p => {
@@ -150,10 +147,10 @@ export class ServerGame extends BaseGame {
                 p.move(p.moveDirection, dt);
             }
         });
+    }
 
-        if (this.gameState === 'PLAYING') {
-            super.checkCollisions(prevBallX, prevBallY);
-        }
+    onCelebrationEnd() {
+        this.checkAllReady();
     }
 
     // --- Hooks ---
@@ -172,10 +169,9 @@ export class ServerGame extends BaseGame {
     // -------------
 
     triggerScore(finalScore, edgeIndex) {
-        this.gameState = 'SCORING';
-        this.lastScore = finalScore; // This is now bounce count
+        this.startCelebration();
+        this.lastScore = finalScore;
         this.finalTime = Math.floor(this.timeElapsed);
-        this.scoreDisplayTimer = 0;
 
         this.io.to(this.roomId).emit('gameEvent', {
             type: 'goal',
@@ -187,16 +183,31 @@ export class ServerGame extends BaseGame {
 
 
     resetGame() {
-        this.resetState(); // BaseGame reset
-        this.readyEdges.clear();
+        if (this.restarting) return;
+        this.restarting = true;
 
-        // Reset server-specific paddle state
-        this.paddles.forEach(p => {
-            p.position = 0.5;
-            p.moveDirection = 0;
-        });
+        try {
+            // Force state update immediately
+            this.setGameState('COUNTDOWN');
 
-        this.broadcastState();
+            this.resetState(); // BaseGame reset
+            this.readyEdges.clear();
+
+            // Reset server-specific paddle state
+            this.paddles.forEach(p => {
+                p.position = 0.5;
+                p.moveDirection = 0;
+            });
+
+            // Critical: Reset loop timer to prevent massive dt frame on next loop
+            this.lastTime = performance.now();
+
+            this.broadcastState();
+        } catch (e) {
+            console.error(`[ServerGame] CRITICAL ERROR in resetGame:`, e);
+        } finally {
+            this.restarting = false;
+        }
     }
 
     broadcastState() {
@@ -213,6 +224,7 @@ export class ServerGame extends BaseGame {
             timeElapsed: this.timeElapsed,
             scoreDisplayTimer: this.scoreDisplayTimer,
             countdownTimer: this.countdownTimer,
+            celebrationTimer: this.celebrationTimer,
             timestamp: Date.now()
         });
     }

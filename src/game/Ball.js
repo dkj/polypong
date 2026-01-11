@@ -35,7 +35,7 @@ export class Ball {
         for (let i = 0; i < this.trail.length; i++) {
             const point = this.trail[i];
             const alpha = 1 - (i / this.maxTrailLength); // Fade out
-            const size = this.radius * (1 - (i / this.maxTrailLength) * 0.5); // Shrink slightly
+            const size = Math.max(0, this.radius * (1 - (i / this.maxTrailLength) * 0.5)); // Shrink slightly
 
             ctx.beginPath();
             ctx.arc(centerX + point.x, centerY + point.y, size, 0, Math.PI * 2);

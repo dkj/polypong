@@ -51,6 +51,12 @@ function testServerRestart() {
 
     console.log('Ball position after SCORING frames:', game.ball.x.toFixed(2), game.ball.y.toFixed(2));
 
+    // WAIT for celebration to finish (2.5s)
+    console.log('Waiting for celebration timer to expire...');
+    for (let i = 0; i < 160; i++) {
+        game.update(0.016);
+    }
+
     // Now trigger restart
     console.log('\nProcessing restart (via toggleReady)...');
     game.toggleReady('p1', true);

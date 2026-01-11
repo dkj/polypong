@@ -6,15 +6,26 @@ export class ShareManager {
         this.text = 'For your consideration, I am sharing this polygon pong game.';
     }
 
-    async share(url, isInvite = false) {
+    getShareText(game, isInvite = false) {
+        if (game && game.hasPlayed && (game.gameState === 'SCORING' || game.gameState === 'TERMINATED')) {
+            const isMulti = game.mode === 'online';
+            const subject = isMulti ? 'We' : 'I';
+            let text = `${subject} survived ${game.finalTime} seconds with a score of ${game.lastScore} !`;
+            if (isMulti) text += ' Join us at';
+            return text;
+        }
+        return isInvite
+            ? 'Care to join us for our imminent game of Polypongon? Join us at'
+            : this.text;
+    }
+
+    async share(url, isInvite = false, customText = null) {
         const shareData = {
             title: this.title,
-            text: isInvite ? 'Care to join us for our imminent game of Polypongon?' : this.text,
+            text: customText || this.getShareText(window.game, isInvite),
             url: url
         };
 
-        // More permissive detection: prioritize navigator.share.
-        // Only use canShare as a secondary check if it's actually provided by the browser (Safari doesn't).
         const canUseNative = navigator.share && (!navigator.canShare || navigator.canShare(shareData));
 
         if (canUseNative) {
@@ -28,7 +39,6 @@ export class ShareManager {
             }
         }
 
-        // Fallback or manual modal handling will happen in main.js
         return { success: false };
     }
 
@@ -42,8 +52,8 @@ export class ShareManager {
         }
     }
 
-    getSocialLinks(url, isInvite = false) {
-        const text = isInvite ? 'Care to join us for our imminent game of Polypongon?' : this.text;
+    getSocialLinks(url, isInvite = false, customText = null) {
+        const text = customText || this.getShareText(window.game, isInvite);
         const encodedUrl = encodeURIComponent(url);
         const encodedText = encodeURIComponent(text);
 

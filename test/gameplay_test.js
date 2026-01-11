@@ -30,10 +30,16 @@ function testFreezeAndRestart() {
     assert.equal(game.lastScore, 10);
 
     // 2. Advance time - Verify NO auto-restart and NO update
+
+    // First, wait for celebration to finish (2.5s)
+    for (let i = 0; i < 160; i++) { // 160 * 16ms = 2.56s
+        game.update(0.016);
+    }
+
     const initialRotation = game.polygon.rotation;
 
-    // Simulate 10 seconds passing (way longer than old 5s timer)
-    for (let i = 0; i < 600; i++) { // 600 frames * 16ms = ~10s
+    // Simulate 5 more seconds passing
+    for (let i = 0; i < 300; i++) { // ~5s
         game.update(0.016);
     }
 
@@ -82,10 +88,12 @@ function testMultiplayerFreezeAndRestart() {
     game.triggerScore(5);
     assert.equal(game.gameState, 'SCORING');
 
-    // 2. Verify Freeze
+    // 2. Verify Freeze (After 2.5s celebration)
+    for (let i = 0; i < 160; i++) game.update(0.016);
+
     const initialRotation = game.polygon.rotation;
     game.update(0.1);
-    assert.equal(game.polygon.rotation, initialRotation, 'Rotation should be frozen for multiplayer game too');
+    assert.equal(game.polygon.rotation, initialRotation, 'Rotation should be frozen after celebration');
 
     // 3. Simulating P2 requesting restart
     // In multiplayer, players should use the "playerReady" event.

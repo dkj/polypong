@@ -47,9 +47,9 @@ export class Game extends BaseGame {
 
         // Touch
         this.touchDir = 0;
-        window.addEventListener('touchstart', (e) => this.handleTouch(e));
-        window.addEventListener('touchmove', (e) => this.handleTouch(e));
-        window.addEventListener('touchend', () => this.touchDir = 0);
+        this.canvas.addEventListener('touchstart', (e) => this.handleTouch(e), { passive: false });
+        this.canvas.addEventListener('touchmove', (e) => this.handleTouch(e), { passive: false });
+        this.canvas.addEventListener('touchend', () => this.touchDir = 0);
 
         // Audio & Visual init
         const initAudio = () => {
@@ -78,7 +78,7 @@ export class Game extends BaseGame {
 
         // Initial State
         if (this.gameState === 'SCORING') {
-            this.showMenu('START GAME');
+            this.refreshMenu();
         }
 
         // Hint persistence
@@ -111,46 +111,47 @@ export class Game extends BaseGame {
         }
     }
 
-    showMenu(buttonText) {
-        if (this.menuContainer && this.menuContainer.style.display !== 'flex') {
-            this.menuContainer.style.display = 'flex';
-            if (this.restartBtn) {
-                this.restartBtn.innerText = buttonText;
-                this.restartBtn.focus();
-            }
-        } else if (this.restartBtn && this.restartBtn.innerText !== buttonText) {
-            this.restartBtn.innerText = buttonText;
-        }
+    refreshMenu() {
+        const isOnline = this.mode === 'online';
+        const show = this.gameState === 'TERMINATED' || (this.gameState === 'SCORING' && this.celebrationTimer <= 0);
 
-        if (this.restartBtn) {
-            if (buttonText === 'WAITING...') {
-                this.restartBtn.classList.add('btn-ready');
-            } else {
-                this.restartBtn.classList.remove('btn-ready');
-            }
-        }
+        if (!show) return this.setMenuVisible(false);
+
+        let text = 'START GAME';
+        if (this.gameState === 'TERMINATED') text = 'REJOIN GAME';
+        else if (isOnline) text = (this.readyEdges || []).includes(this.playerIndex) ? 'WAITING...' : "I'M READY";
+        else if (this.hasPlayed) text = 'PLAY AGAIN';
+
+        this.setMenuVisible(true, text);
     }
 
-    hideMenu() {
-        if (this.menuContainer && this.menuContainer.style.display !== 'none') {
-            this.menuContainer.style.display = 'none';
-        }
-        if (this.restartBtn) {
+    setMenuVisible(visible, text = '') {
+        if (!this.menuContainer) return;
+        this.menuContainer.style.display = visible ? 'flex' : 'none';
+        if (visible && this.restartBtn) {
+            if (this.restartBtn.innerText !== text) {
+                this.restartBtn.innerText = text;
+                this.restartBtn.focus();
+            }
+            this.restartBtn.classList.toggle('btn-ready', text === 'WAITING...');
+        } else if (!visible && this.restartBtn) {
             this.restartBtn.classList.remove('btn-ready');
         }
     }
 
     handleRestartAction() {
-        if (this.gameState === 'SCORING') {
+        if (this.gameState === 'SCORING' || this.gameState === 'TERMINATED') {
             if (this.socket) {
-                // In multiplayer, toggle ready state instead of immediate restart
-                const isReady = !this.readyEdges.includes(this.playerIndex);
-                this.socket.emit('playerReady', { ready: isReady });
+                if (this.gameState === 'TERMINATED') {
+                    this.rejoinMultiplayer();
+                } else {
+                    // In multiplayer, toggle ready state instead of immediate restart
+                    const isReady = !this.readyEdges.includes(this.playerIndex);
+                    this.socket.emit('playerReady', { ready: isReady });
+                }
             } else {
                 this.resetLocalGame();
             }
-        } else if (this.gameState === 'TERMINATED' && this.socket) {
-            this.rejoinMultiplayer();
         }
     }
 
@@ -161,44 +162,50 @@ export class Game extends BaseGame {
 
     setGameState(newState) {
         if (this.gameState !== newState) {
-            this.gameState = newState;
+            super.setGameState(newState);
             if (this.onStateChange) {
                 this.onStateChange(newState);
             }
         }
     }
 
-    triggerScore(finalScore, finalTime) {
-        this.setGameState('SCORING');
-        this.lastScore = finalScore;
-        this.finalTime = finalTime ?? Math.floor(this.timeElapsed) ?? 0;
-        this.scoreDisplayTimer = 5.0; // 5 seconds celebration
+    startCelebration() {
+        super.startCelebration();
         this.hasPlayed = true;
-
-        this.showMenu('PLAY AGAIN');
-
-        // Reset Difficulty
-        this.difficulty = 1.0;
-        this.score = 0;
-        this.timeElapsed = 0;
+        if (this.ball) {
+            this.ball.maxTrailLength = 200;
+        }
+        this.refreshMenu();
     }
+
+    triggerScore(score, time) {
+        this.startCelebration();
+        this.lastScore = score;
+        this.finalTime = time ?? Math.floor(this.timeElapsed);
+    }
+
+    onCelebrationEnd() {
+        if (this.ball) {
+            this.ball.maxTrailLength = 20;
+        }
+        this.refreshMenu();
+    }
+
 
     resetLocalGame() {
         this.resetState(); // BaseGame reset
-        this.setGameState('COUNTDOWN');
-        // Local specific override if needed? BaseGame randomizes rotation and sets width.
-        // BaseGame does NOT set paddle position or count.
-        // We assume paddles array is managed. 
-        // In local, we have 1 paddle.
-        // In local, we only have one paddle at edge 0.
+        this.lastTime = performance.now(); // Reset timer to prevent dt spikes
+
+        // In local, we have 1 paddle at edge 0.
         this.paddles = [new Paddle(0)];
         this.paddles[0].width = 0.5;
 
-        this.hideMenu();
+        this.setMenuVisible(false);
     }
 
     startMultiplayer(roomId, instanceId = null) {
         console.log('Attempting to connect to server...');
+        this.clearResults();
         this.mode = 'online';
 
         // Build query parameters for instance routing
@@ -240,12 +247,25 @@ export class Game extends BaseGame {
         this.stateBuffer = [];
 
         this.socket.on('gameState', (state) => {
+            if (this.stateBuffer.length === 0 && this.gameState !== state.gameState) {
+                // First state update
+            }
+
             this.stateBuffer.push(state);
             if (this.stateBuffer.length > 30) {
                 this.stateBuffer.shift();
             }
 
             this.difficulty = state.difficulty;
+            const oldTimer = this.celebrationTimer;
+            if (state.celebrationTimer !== undefined) {
+                this.celebrationTimer = state.celebrationTimer;
+                if (oldTimer > 0 && this.celebrationTimer === 0) {
+                    this.onCelebrationEnd();
+                }
+            }
+
+            const previousState = this.gameState;
             this.setGameState(state.gameState);
             this.score = state.score;
             this.lastScore = state.lastScore;
@@ -258,14 +278,12 @@ export class Game extends BaseGame {
             }
             this.audio.setDifficulty(this.difficulty);
 
-            if (this.gameState === 'PLAYING' || this.gameState === 'COUNTDOWN') {
-                this.hideMenu();
-            } else if (this.gameState === 'SCORING') {
-                const isReady = this.readyEdges.includes(this.playerIndex);
-                this.showMenu(isReady ? 'WAITING...' : "I'M READY");
-            }
-            if (state.countdownTimer !== undefined) {
+            this.refreshMenu();
+            if (state.countdownTimer !== undefined && state.countdownTimer !== null) {
                 this.countdownTimer = state.countdownTimer;
+            } else if (state.gameState === 'COUNTDOWN' && previousState !== 'COUNTDOWN') {
+                // Fallback: Resetting countdown timer if server packet is missing it
+                this.countdownTimer = 3;
             }
         });
 
@@ -276,20 +294,17 @@ export class Game extends BaseGame {
                     this.addParticles(this.ball.x, this.ball.y, this.getPlayerColor(event.edgeIndex));
                 }
             }
-            if (event.type === 'miss') {
-                this.audio.playBounce();
-                this.flashEffect();
-            }
             if (event.type === 'goal') {
-                this.stateBuffer = [];
                 this.flashEffect('rgba(239, 68, 68, 0.4)');
-                this.audio.playBounce();
-                if (event.edgeIndex !== undefined) {
-                    this.addParticles(this.ball.x, this.ball.y, '#ff4444', 20);
+                this.audio.playGoal();
+                if (this.ball) {
+                    this.ball.maxTrailLength = 200;
                 }
                 this.lastScore = event.score;
                 this.finalTime = event.time;
                 this.hasPlayed = true;
+                this.startCelebration();
+                this.setMenuVisible(false);
             }
         });
 
@@ -300,7 +315,7 @@ export class Game extends BaseGame {
             this.finalTime = data.finalTime || 0;
             this.stateBuffer = [];
 
-            this.showMenu('REJOIN GAME');
+            this.refreshMenu();
         });
 
         this.socket.on('error', (error) => {
@@ -328,8 +343,8 @@ export class Game extends BaseGame {
 
         // Reset to initial menu state instead of immediately starting
         this.setGameState('SCORING');
-        this.hasPlayed = false;
-        this.showMenu('START GAME');
+        this.clearResults();
+        this.setMenuVisible(true, 'START GAME');
 
         // Reset polygon and paddles for local play
         this.polygon.updateSides(5);
@@ -347,11 +362,16 @@ export class Game extends BaseGame {
         this.setGameState('SCORING');
         this.terminationReason = null;
         this.stateBuffer = [];
+        this.clearResults();
         this.startMultiplayer(this.currentRoomId, this.currentInstanceId);
     }
 
     handleTouch(e) {
-        e.preventDefault();
+        if (e.cancelable) {
+            e.preventDefault();
+        }
+
+
         const touchX = e.touches[0].clientX;
         if (touchX < window.innerWidth / 2) {
             this.touchDir = -1;
@@ -397,6 +417,9 @@ export class Game extends BaseGame {
             this.handleOnlineInput(dt);
         }
 
+        // In online mode, we still need to decrement celebrationTimer locally for smooth visual effects
+        // though the server will also send updates.
+
         this.updateParticles(dt);
 
         this.draw();
@@ -405,22 +428,6 @@ export class Game extends BaseGame {
     }
 
     update(dt) {
-        if (this.gameState === 'SCORING') return;
-
-        const prevBallX = this.ball.x;
-        const prevBallY = this.ball.y;
-
-        // Base Rules (Difficulty, Polygon Rotation, Ball Speed check, Paddle Widths)
-        super.updateGameRules(dt);
-
-        // Local specific: Update audio difficulty
-        this.audio.setDifficulty(this.difficulty);
-
-        if (this.gameState === 'PLAYING') {
-            // Move Ball
-            this.ball.update(dt);
-        }
-
         // Handle Input (Local Paddle)
         let dir = 0;
         if (this.keys['ArrowLeft'] || this.keys['KeyA']) dir = -1;
@@ -431,10 +438,8 @@ export class Game extends BaseGame {
             this.paddles[0].move(dir, dt);
         }
 
-        if (this.gameState === 'PLAYING') {
-            // Check Collisions
-            super.checkCollisions(prevBallX, prevBallY);
-        }
+        super.update(dt);
+        this.audio.setDifficulty(this.difficulty);
     }
 
     // --- Hooks for BaseGame ---
@@ -451,19 +456,28 @@ export class Game extends BaseGame {
     }
 
     onGoal(_edgeIndex) {
-        this.audio.playBounce();
+        this.audio.playGoal();
         this.flashEffect('rgba(239, 68, 68, 0.4)');
-        this.addParticles(this.ball.x, this.ball.y, '#ff4444', 20);
+        if (this.ball) {
+            this.ball.maxTrailLength = 200;
+        }
         this.triggerScore(this.score, Math.floor(this.timeElapsed));
+
+        // Reset local stats immediately
+        this.difficulty = 1.0;
+        this.score = 0;
+        this.timeElapsed = 0;
     }
 
     // --------------------------
 
     handleOnlineInput(dt) {
         if (!this.socket) return;
-        if (this.gameState === 'SCORING') return;
 
         this.applyInterpolation();
+        super.updateGameRules(dt);
+
+        if (this.gameState === 'SCORING') return;
 
         let dir = 0;
         if (this.keys['ArrowLeft'] || this.keys['KeyA']) dir = -1;
@@ -647,7 +661,7 @@ export class Game extends BaseGame {
             this.ctx.globalAlpha = p.life;
             this.ctx.fillStyle = p.color;
             this.ctx.beginPath();
-            this.ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+            this.ctx.arc(p.x, p.y, Math.max(0, p.size), 0, Math.PI * 2);
             this.ctx.fill();
         });
         this.ctx.globalAlpha = 1.0;
@@ -686,18 +700,24 @@ export class Game extends BaseGame {
             }
             this.ctx.shadowBlur = 0;
         } else if (this.gameState === 'SCORING') {
-            this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            const overlayAlpha = this.celebrationTimer > 0 ? 0.3 : 0.7;
+            this.ctx.fillStyle = `rgba(0, 0, 0, ${overlayAlpha})`;
             this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
             this.ctx.fillStyle = '#38bdf8';
             this.ctx.shadowColor = '#38bdf8';
-            this.ctx.shadowBlur = 20;
-            this.ctx.font = `800 ${64 * s}px 'Outfit', sans-serif`;
+
+            // Pulsate effect during celebration
+            const pulsate = this.celebrationTimer > 0 ? Math.sin(this.celebrationTimer * 10) * 10 : 0;
+            this.ctx.shadowBlur = 20 + pulsate;
+            this.ctx.font = `800 ${(64 + pulsate / 2) * s}px 'Outfit', sans-serif`;
             this.ctx.textAlign = 'center';
 
             if (this.hasPlayed) {
                 this.ctx.fillText("PONGED!", this.canvas.width / 2, this.canvas.height / 2 - 80 * s);
                 this.ctx.fillStyle = '#fff';
                 this.ctx.font = `600 ${32 * s}px 'Outfit', sans-serif`;
+                this.ctx.shadowBlur = 0;
                 this.ctx.fillText(`SCORE: ${this.lastScore} | TIME: ${this.finalTime}S`, this.canvas.width / 2, this.canvas.height / 2 - 20 * s);
             } else {
                 this.ctx.fillText("Anyone for Pong?", this.canvas.width / 2, this.canvas.height / 2 - 20 * s);

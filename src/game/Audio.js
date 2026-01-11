@@ -55,6 +55,26 @@ export class AudioManager {
         osc.stop(this.ctx.currentTime + 0.1);
     }
 
+    playGoal() {
+        if (this.ctx.state === 'suspended' || this.mode === this.modes.OFF) return;
+
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+
+        osc.connect(gain);
+        gain.connect(this.masterGain);
+
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(150, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(40, this.ctx.currentTime + 0.3);
+
+        gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.3);
+
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.3);
+    }
+
     scheduler() {
         if (!this.isPlaying) return;
 

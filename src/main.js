@@ -83,10 +83,12 @@ registerSW({
   },
 });
 
-// Auto-close modal when game starts
+// Update UI when game state changes
 game.onStateChange = (state) => {
   if (state === 'COUNTDOWN' || state === 'PLAYING') {
     closeShareModal();
+    // Fallback: ensure it's removed
+    document.getElementById('share-modal')?.classList.remove('visible');
   }
 };
 
@@ -120,7 +122,9 @@ const shareUrlInput = document.getElementById('shareUrlInput');
 const qrCanvas = document.getElementById('shareQRCanvas');
 
 function openShareModal(url, isInvite = false) {
-  shareTitle.innerText = isInvite ? 'INVITE TO GAME' : 'SHARE Polypongon';
+  const isScore = game.hasPlayed && (game.gameState === 'SCORING' || game.gameState === 'TERMINATED');
+
+  shareTitle.innerText = isInvite ? 'INVITE TO GAME' : (isScore ? 'SHARE SCORE' : 'SHARE Polypongon');
   shareUrlInput.value = url;
   shareManager.renderQRCode(qrCanvas, url);
 
@@ -176,6 +180,7 @@ window.addEventListener('popstate', (e) => {
 });
 
 const shareMenuBtn = document.getElementById('shareMenuBtn');
+
 shareMenuBtn.addEventListener('click', () => {
   if (game.mode === 'online') {
     openShareModal(window.location.href, true);
