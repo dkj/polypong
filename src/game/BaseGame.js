@@ -28,12 +28,19 @@ export class BaseGame {
         this.hasPlayed = false;
     }
 
+    setGameState(newState) {
+        if (this.gameState !== newState) {
+            this.gameState = newState;
+        }
+    }
+
     /**
      * Standard reset logic for starting a new round
      */
     resetState() {
-        this.gameState = 'COUNTDOWN';
-        this.countdownTimer = GAME_CONSTANTS.COUNTDOWN_DURATION || 3;
+        this.setGameState('COUNTDOWN');
+        this.countdownTimer = (GAME_CONSTANTS && GAME_CONSTANTS.COUNTDOWN_DURATION) || 3;
+        this.celebrationTimer = 0;
         this.resetBall();
         this.difficulty = 1.0;
         this.score = 0;
@@ -52,6 +59,7 @@ export class BaseGame {
         this.ball.x = 0;
         this.ball.y = 0;
         this.ball.trail = []; // Clear trail from previous game
+        this.ball.maxTrailLength = 20;
         const speed = GAME_CONSTANTS.BALL_SPEED_BASE;
         const angle = Math.random() * Math.PI * 2;
         this.ball.vx = Math.cos(angle) * speed;
@@ -73,7 +81,7 @@ export class BaseGame {
         if (this.gameState === 'COUNTDOWN') {
             this.countdownTimer -= dt;
             if (this.countdownTimer <= 0) {
-                this.gameState = 'PLAYING';
+                this.setGameState('PLAYING');
                 this.countdownTimer = 0;
             }
             return;
@@ -200,7 +208,7 @@ export class BaseGame {
     }
 
     startCelebration() {
-        this.gameState = 'SCORING';
+        this.setGameState('SCORING');
         this.celebrationTimer = 2.5;
     }
 

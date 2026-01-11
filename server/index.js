@@ -112,11 +112,12 @@ io.on('connection', (socket) => {
     });
 
     // Handle input for this specific game
+    socket.removeAllListeners('input');
     socket.on('input', (data) => {
       if (game) game.handleInput(socket.id, data.dir);
     });
 
-
+    socket.removeAllListeners('playerReady');
     socket.on('playerReady', (data) => {
       if (game) game.toggleReady(socket.id, data.ready);
     });

@@ -47,9 +47,9 @@ export class Game extends BaseGame {
 
         // Touch
         this.touchDir = 0;
-        window.addEventListener('touchstart', (e) => this.handleTouch(e));
-        window.addEventListener('touchmove', (e) => this.handleTouch(e));
-        window.addEventListener('touchend', () => this.touchDir = 0);
+        this.canvas.addEventListener('touchstart', (e) => this.handleTouch(e), { passive: false });
+        this.canvas.addEventListener('touchmove', (e) => this.handleTouch(e), { passive: false });
+        this.canvas.addEventListener('touchend', () => this.touchDir = 0);
 
         // Audio & Visual init
         const initAudio = () => {
@@ -140,16 +140,18 @@ export class Game extends BaseGame {
     }
 
     handleRestartAction() {
-        if (this.gameState === 'SCORING') {
+        if (this.gameState === 'SCORING' || this.gameState === 'TERMINATED') {
             if (this.socket) {
-                // In multiplayer, toggle ready state instead of immediate restart
-                const isReady = !this.readyEdges.includes(this.playerIndex);
-                this.socket.emit('playerReady', { ready: isReady });
+                if (this.gameState === 'TERMINATED') {
+                    this.rejoinMultiplayer();
+                } else {
+                    // In multiplayer, toggle ready state instead of immediate restart
+                    const isReady = !this.readyEdges.includes(this.playerIndex);
+                    this.socket.emit('playerReady', { ready: isReady });
+                }
             } else {
                 this.resetLocalGame();
             }
-        } else if (this.gameState === 'TERMINATED' && this.socket) {
-            this.rejoinMultiplayer();
         }
     }
 
@@ -160,7 +162,7 @@ export class Game extends BaseGame {
 
     setGameState(newState) {
         if (this.gameState !== newState) {
-            this.gameState = newState;
+            super.setGameState(newState);
             if (this.onStateChange) {
                 this.onStateChange(newState);
             }
@@ -170,6 +172,9 @@ export class Game extends BaseGame {
     startCelebration() {
         super.startCelebration();
         this.hasPlayed = true;
+        if (this.ball) {
+            this.ball.maxTrailLength = 200;
+        }
         this.refreshMenu();
     }
 
@@ -180,18 +185,18 @@ export class Game extends BaseGame {
     }
 
     onCelebrationEnd() {
+        if (this.ball) {
+            this.ball.maxTrailLength = 20;
+        }
         this.refreshMenu();
     }
 
 
     resetLocalGame() {
         this.resetState(); // BaseGame reset
-        this.setGameState('COUNTDOWN');
-        // Local specific override if needed? BaseGame randomizes rotation and sets width.
-        // BaseGame does NOT set paddle position or count.
-        // We assume paddles array is managed. 
-        // In local, we have 1 paddle.
-        // In local, we only have one paddle at edge 0.
+        this.lastTime = performance.now(); // Reset timer to prevent dt spikes
+
+        // In local, we have 1 paddle at edge 0.
         this.paddles = [new Paddle(0)];
         this.paddles[0].width = 0.5;
 
@@ -242,15 +247,25 @@ export class Game extends BaseGame {
         this.stateBuffer = [];
 
         this.socket.on('gameState', (state) => {
+            if (this.stateBuffer.length === 0 && this.gameState !== state.gameState) {
+                // First state update
+            }
+
             this.stateBuffer.push(state);
             if (this.stateBuffer.length > 30) {
                 this.stateBuffer.shift();
             }
 
             this.difficulty = state.difficulty;
+            const oldTimer = this.celebrationTimer;
             if (state.celebrationTimer !== undefined) {
                 this.celebrationTimer = state.celebrationTimer;
+                if (oldTimer > 0 && this.celebrationTimer === 0) {
+                    this.onCelebrationEnd();
+                }
             }
+
+            const previousState = this.gameState;
             this.setGameState(state.gameState);
             this.score = state.score;
             this.lastScore = state.lastScore;
@@ -264,8 +279,11 @@ export class Game extends BaseGame {
             this.audio.setDifficulty(this.difficulty);
 
             this.refreshMenu();
-            if (state.countdownTimer !== undefined) {
+            if (state.countdownTimer !== undefined && state.countdownTimer !== null) {
                 this.countdownTimer = state.countdownTimer;
+            } else if (state.gameState === 'COUNTDOWN' && previousState !== 'COUNTDOWN') {
+                // Fallback: Resetting countdown timer if server packet is missing it
+                this.countdownTimer = 3;
             }
         });
 
@@ -276,15 +294,11 @@ export class Game extends BaseGame {
                     this.addParticles(this.ball.x, this.ball.y, this.getPlayerColor(event.edgeIndex));
                 }
             }
-            if (event.type === 'miss') {
-                this.audio.playBounce();
-                this.flashEffect();
-            }
             if (event.type === 'goal') {
                 this.flashEffect('rgba(239, 68, 68, 0.4)');
-                this.audio.playBounce();
-                if (event.edgeIndex !== undefined) {
-                    this.addParticles(this.ball.x, this.ball.y, '#ff4444', 20);
+                this.audio.playGoal();
+                if (this.ball) {
+                    this.ball.maxTrailLength = 200;
                 }
                 this.lastScore = event.score;
                 this.finalTime = event.time;
@@ -353,7 +367,11 @@ export class Game extends BaseGame {
     }
 
     handleTouch(e) {
-        e.preventDefault();
+        if (e.cancelable) {
+            e.preventDefault();
+        }
+
+
         const touchX = e.touches[0].clientX;
         if (touchX < window.innerWidth / 2) {
             this.touchDir = -1;
@@ -438,9 +456,11 @@ export class Game extends BaseGame {
     }
 
     onGoal(_edgeIndex) {
-        this.audio.playBounce();
+        this.audio.playGoal();
         this.flashEffect('rgba(239, 68, 68, 0.4)');
-        this.addParticles(this.ball.x, this.ball.y, '#ff4444', 20);
+        if (this.ball) {
+            this.ball.maxTrailLength = 200;
+        }
         this.triggerScore(this.score, Math.floor(this.timeElapsed));
 
         // Reset local stats immediately
@@ -641,7 +661,7 @@ export class Game extends BaseGame {
             this.ctx.globalAlpha = p.life;
             this.ctx.fillStyle = p.color;
             this.ctx.beginPath();
-            this.ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+            this.ctx.arc(p.x, p.y, Math.max(0, p.size), 0, Math.PI * 2);
             this.ctx.fill();
         });
         this.ctx.globalAlpha = 1.0;

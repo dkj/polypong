@@ -87,6 +87,8 @@ registerSW({
 game.onStateChange = (state) => {
   if (state === 'COUNTDOWN' || state === 'PLAYING') {
     closeShareModal();
+    // Fallback: ensure it's removed
+    document.getElementById('share-modal')?.classList.remove('visible');
   }
 };
 
