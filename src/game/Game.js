@@ -277,11 +277,22 @@ export class Game extends BaseGame {
             }
             this.audio.setDifficulty(this.difficulty);
 
-            if (this.gameState === 'PLAYING' || this.gameState === 'COUNTDOWN') {
+            if (this.gameState === 'PLAYING' || (this.gameState === 'COUNTDOWN')) {
                 this.hideMenu();
-            } else if (this.gameState === 'SCORING' && (state.celebrationTimer === undefined || state.celebrationTimer <= 0)) {
-                const isReady = this.readyEdges.includes(this.playerIndex);
-                this.showMenu(isReady ? 'WAITING...' : "I'M READY");
+            } else if (this.gameState === 'SCORING') {
+                // Celebration menu show logic
+                if (this.celebrationTimer <= 0 && !this.wasCelebrationMenuShown) {
+                    this.wasCelebrationMenuShown = true;
+                    const isReady = this.readyEdges.includes(this.playerIndex);
+                    this.showMenu(isReady ? 'WAITING...' : "I'M READY");
+                    if (this.onStateChange) this.onStateChange(this.gameState);
+                } else if (this.celebrationTimer > 0) {
+                    this.hideMenu();
+                } else if (this.wasCelebrationMenuShown) {
+                    // Update menu text if ready state changed
+                    const isReady = this.readyEdges.includes(this.playerIndex);
+                    this.showMenu(isReady ? 'WAITING...' : "I'M READY");
+                }
             }
             if (state.countdownTimer !== undefined) {
                 this.countdownTimer = state.countdownTimer;
@@ -424,14 +435,9 @@ export class Game extends BaseGame {
             }
         }
 
-        if (this.celebrationTimer <= 0 && this.gameState === 'SCORING' && !this.wasCelebrationMenuShown) {
+        if (this.mode === 'local' && this.celebrationTimer <= 0 && this.gameState === 'SCORING' && !this.wasCelebrationMenuShown) {
             this.wasCelebrationMenuShown = true;
-            if (this.mode === 'local') {
-                this.showMenu('PLAY AGAIN');
-            } else {
-                const isReady = this.readyEdges.includes(this.playerIndex);
-                this.showMenu(isReady ? 'WAITING...' : "I'M READY");
-            }
+            this.showMenu('PLAY AGAIN');
             if (this.onStateChange) this.onStateChange(this.gameState);
         }
 

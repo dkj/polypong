@@ -96,9 +96,7 @@ test.describe('End of Game Features', () => {
                     }
                 ];
 
-                // Disable real socket updates to keep our mock state stable
-                window.game.socket.off('gameState');
-                window.game.socket.off('gameEvent');
+                // Keep socket listeners active to trigger them manually
 
                 window.game.hideMenu();
             });
@@ -111,6 +109,19 @@ test.describe('End of Game Features', () => {
             await page.waitForTimeout(100);
             const pos2 = await page.evaluate(() => ({ x: window.game.ball.x, y: window.game.ball.y }));
             expect(pos2.x).not.toBe(pos1.x);
+
+            // 3. Trigger menu via socket state update (celebration finished)
+            await page.evaluate(() => {
+                const handler = window.game.socket.listeners('gameState')[0];
+                handler({
+                    gameState: 'SCORING',
+                    celebrationTimer: 0,
+                    lastScore: 8,
+                    finalTime: 45,
+                    readyEdges: [],
+                    paddles: []
+                });
+            });
 
             // 3. Share button appears after celebration
             await page.waitForFunction(() => {
@@ -164,6 +175,59 @@ test.describe('End of Game Features', () => {
             twitterLink = await page.locator('#shareTwitter').getAttribute('href');
             expect(twitterLink).not.toContain(encodeURIComponent('I survived 30 seconds with a score of 10 !'));
             expect(twitterLink).toContain(encodeURIComponent('For your consideration, I am sharing this polygon pong game.'));
+        });
+
+        test('should gate "I\'M READY" button on server celebration timer', async ({ page }) => {
+            // Handle prompt
+            page.on('dialog', dialog => dialog.accept('ROOMSYNC'));
+            await page.route('/api/instance', async route => {
+                await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ instanceId: 'test-inst', isFlyInstance: true }) });
+            });
+            await page.locator('#onlineBtn').click();
+
+            // Simulate server state where celebration is ongoing
+            await page.evaluate(() => {
+                // Close auto-opened share modal
+                document.getElementById('share-modal').classList.remove('visible');
+
+                // Manually trigger the gameState handler as if it came from socket
+                // We use the same object structure that Game.js expects
+                const mockState = {
+                    gameState: 'SCORING',
+                    celebrationTimer: 2.0,
+                    readyEdges: [],
+                    score: 5,
+                    lastScore: 5,
+                    difficulty: 1.0,
+                    paddles: [{ edgeIndex: window.game.playerIndex, position: 0.5, width: 0.5 }]
+                };
+
+                // Directly call the handler that's attached to the socket
+                const handler = window.game.socket.listeners('gameState')[0];
+                handler(mockState);
+            });
+
+            // 1. Menu should be hidden while celebrationTimer > 0 (even if local decrement happens)
+            await expect(page.locator('#game-menu')).toBeHidden();
+
+            // 2. Advance server state to celebration finished
+            await page.evaluate(() => {
+                const mockState = {
+                    gameState: 'SCORING',
+                    celebrationTimer: 0,
+                    readyEdges: [],
+                    score: 5,
+                    lastScore: 5,
+                    difficulty: 1.0,
+                    paddles: [{ edgeIndex: window.game.playerIndex, position: 0.5, width: 0.5 }]
+                };
+                const handler = window.game.socket.listeners('gameState')[1] || window.game.socket.listeners('gameState')[0];
+                handler(mockState);
+            });
+
+            // 3. Menu should now appear
+            await expect(page.locator('#game-menu')).toBeVisible();
+            await expect(page.locator('#restartBtn')).toHaveText("I'M READY");
         });
     });
 });

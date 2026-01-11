@@ -72,6 +72,7 @@ export class ServerGame extends BaseGame {
 
     checkAllReady() {
         if (this.gameState !== 'SCORING' || this.players.size === 0) return;
+        if (this.celebrationTimer > 0) return; // Gate on celebration timer
 
         // Check if all players are ready
         const allReady = Array.from(this.players.values()).every(idx => this.readyEdges.has(idx));
@@ -137,11 +138,17 @@ export class ServerGame extends BaseGame {
         const prevBallX = this.ball.x;
         const prevBallY = this.ball.y;
 
+        const wasCelebrationRunning = this.gameState === 'SCORING' && this.celebrationTimer > 0;
         super.updateGameRules(dt);
+        const isCelebrationDone = wasCelebrationRunning && this.celebrationTimer <= 0;
 
         if (this.gameState === 'PLAYING' || (this.gameState === 'SCORING' && this.celebrationTimer > 0)) {
             // Move Ball
             this.ball.update(dt);
+        }
+
+        if (isCelebrationDone) {
+            this.checkAllReady();
         }
 
         // Update Paddles Movement (Server specific)
