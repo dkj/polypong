@@ -6,10 +6,11 @@ export class ShareManager {
         this.text = 'For your consideration, I am sharing this polygon pong game.';
     }
 
-    async share(url, isInvite = false) {
+    async share(url, isInvite = false, customText = null) {
+        const defaultInviteText = `Care to join us for our imminent game of Polypongon? Join us at`;
         const shareData = {
             title: this.title,
-            text: isInvite ? 'Care to join us for our imminent game of Polypongon?' : this.text,
+            text: customText || (isInvite ? defaultInviteText : this.text),
             url: url
         };
 
@@ -42,8 +43,9 @@ export class ShareManager {
         }
     }
 
-    getSocialLinks(url, isInvite = false) {
-        const text = isInvite ? 'Care to join us for our imminent game of Polypongon?' : this.text;
+    getSocialLinks(url, isInvite = false, customText = null) {
+        const defaultInviteText = `Care to join us for our imminent game of Polypongon? Join us at`;
+        const text = customText || (isInvite ? defaultInviteText : this.text);
         const encodedUrl = encodeURIComponent(url);
         const encodedText = encodeURIComponent(text);
 

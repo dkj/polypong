@@ -132,14 +132,14 @@ export class ServerGame extends BaseGame {
     }
 
     update(dt) {
-        if (this.gameState === 'SCORING') return;
+        if (this.gameState === 'SCORING' && this.celebrationTimer <= 0) return;
 
         const prevBallX = this.ball.x;
         const prevBallY = this.ball.y;
 
         super.updateGameRules(dt);
 
-        if (this.gameState === 'PLAYING') {
+        if (this.gameState === 'PLAYING' || (this.gameState === 'SCORING' && this.celebrationTimer > 0)) {
             // Move Ball
             this.ball.update(dt);
         }
@@ -172,7 +172,7 @@ export class ServerGame extends BaseGame {
     // -------------
 
     triggerScore(finalScore, edgeIndex) {
-        this.gameState = 'SCORING';
+        this.startCelebration();
         this.lastScore = finalScore; // This is now bounce count
         this.finalTime = Math.floor(this.timeElapsed);
         this.scoreDisplayTimer = 0;
@@ -213,6 +213,7 @@ export class ServerGame extends BaseGame {
             timeElapsed: this.timeElapsed,
             scoreDisplayTimer: this.scoreDisplayTimer,
             countdownTimer: this.countdownTimer,
+            celebrationTimer: this.celebrationTimer,
             timestamp: Date.now()
         });
     }

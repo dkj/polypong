@@ -84,6 +84,7 @@ export class Game extends BaseGame {
         // Hint persistence
         this.leftHintTimer = 0;
         this.rightHintTimer = 0;
+        this.wasCelebrationMenuShown = false;
     }
 
     addParticles(x, y, color, count = 10) {
@@ -168,14 +169,25 @@ export class Game extends BaseGame {
         }
     }
 
+    startCelebration() {
+        super.startCelebration();
+        this.wasCelebrationMenuShown = false;
+    }
+
     triggerScore(finalScore, finalTime) {
-        this.setGameState('SCORING');
+        this.startCelebration();
         this.lastScore = finalScore;
         this.finalTime = finalTime ?? Math.floor(this.timeElapsed) ?? 0;
         this.scoreDisplayTimer = 5.0; // 5 seconds celebration
         this.hasPlayed = true;
+        this.hideMenu();
 
-        this.showMenu('PLAY AGAIN');
+        // Don't show menu immediately
+        // this.showMenu('PLAY AGAIN');
+
+        if (this.onStateChange) {
+            this.onStateChange(this.gameState);
+        }
 
         // Reset Difficulty
         this.difficulty = 1.0;
@@ -246,6 +258,9 @@ export class Game extends BaseGame {
             }
 
             this.difficulty = state.difficulty;
+            if (state.celebrationTimer !== undefined) {
+                this.celebrationTimer = state.celebrationTimer;
+            }
             this.setGameState(state.gameState);
             this.score = state.score;
             this.lastScore = state.lastScore;
@@ -260,7 +275,7 @@ export class Game extends BaseGame {
 
             if (this.gameState === 'PLAYING' || this.gameState === 'COUNTDOWN') {
                 this.hideMenu();
-            } else if (this.gameState === 'SCORING') {
+            } else if (this.gameState === 'SCORING' && (state.celebrationTimer === undefined || state.celebrationTimer <= 0)) {
                 const isReady = this.readyEdges.includes(this.playerIndex);
                 this.showMenu(isReady ? 'WAITING...' : "I'M READY");
             }
@@ -281,7 +296,6 @@ export class Game extends BaseGame {
                 this.flashEffect();
             }
             if (event.type === 'goal') {
-                this.stateBuffer = [];
                 this.flashEffect('rgba(239, 68, 68, 0.4)');
                 this.audio.playBounce();
                 if (event.edgeIndex !== undefined) {
@@ -290,6 +304,8 @@ export class Game extends BaseGame {
                 this.lastScore = event.score;
                 this.finalTime = event.time;
                 this.hasPlayed = true;
+                this.startCelebration();
+                this.hideMenu();
             }
         });
 
@@ -395,6 +411,23 @@ export class Game extends BaseGame {
             this.update(dt);
         } else {
             this.handleOnlineInput(dt);
+            // In online mode, we still need to decrement celebrationTimer locally for smooth visual effects
+            // though the server will also send updates.
+            if (this.celebrationTimer > 0) {
+                this.celebrationTimer -= dt;
+                if (this.celebrationTimer < 0) this.celebrationTimer = 0;
+            }
+        }
+
+        if (this.celebrationTimer <= 0 && this.gameState === 'SCORING' && !this.wasCelebrationMenuShown) {
+            this.wasCelebrationMenuShown = true;
+            if (this.mode === 'local') {
+                this.showMenu('PLAY AGAIN');
+            } else {
+                const isReady = this.readyEdges.includes(this.playerIndex);
+                this.showMenu(isReady ? 'WAITING...' : "I'M READY");
+            }
+            if (this.onStateChange) this.onStateChange(this.gameState);
         }
 
         this.updateParticles(dt);
@@ -405,7 +438,7 @@ export class Game extends BaseGame {
     }
 
     update(dt) {
-        if (this.gameState === 'SCORING') return;
+        if (this.gameState === 'SCORING' && this.celebrationTimer <= 0) return;
 
         const prevBallX = this.ball.x;
         const prevBallY = this.ball.y;
@@ -416,7 +449,7 @@ export class Game extends BaseGame {
         // Local specific: Update audio difficulty
         this.audio.setDifficulty(this.difficulty);
 
-        if (this.gameState === 'PLAYING') {
+        if (this.gameState === 'PLAYING' || (this.gameState === 'SCORING' && this.celebrationTimer > 0)) {
             // Move Ball
             this.ball.update(dt);
         }
@@ -461,9 +494,10 @@ export class Game extends BaseGame {
 
     handleOnlineInput(dt) {
         if (!this.socket) return;
-        if (this.gameState === 'SCORING') return;
 
         this.applyInterpolation();
+
+        if (this.gameState === 'SCORING') return;
 
         let dir = 0;
         if (this.keys['ArrowLeft'] || this.keys['KeyA']) dir = -1;
@@ -686,18 +720,24 @@ export class Game extends BaseGame {
             }
             this.ctx.shadowBlur = 0;
         } else if (this.gameState === 'SCORING') {
-            this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            const overlayAlpha = this.celebrationTimer > 0 ? 0.3 : 0.7;
+            this.ctx.fillStyle = `rgba(0, 0, 0, ${overlayAlpha})`;
             this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
             this.ctx.fillStyle = '#38bdf8';
             this.ctx.shadowColor = '#38bdf8';
-            this.ctx.shadowBlur = 20;
-            this.ctx.font = `800 ${64 * s}px 'Outfit', sans-serif`;
+
+            // Pulsate effect during celebration
+            const pulsate = this.celebrationTimer > 0 ? Math.sin(this.celebrationTimer * 10) * 10 : 0;
+            this.ctx.shadowBlur = 20 + pulsate;
+            this.ctx.font = `800 ${(64 + pulsate / 2) * s}px 'Outfit', sans-serif`;
             this.ctx.textAlign = 'center';
 
             if (this.hasPlayed) {
                 this.ctx.fillText("PONGED!", this.canvas.width / 2, this.canvas.height / 2 - 80 * s);
                 this.ctx.fillStyle = '#fff';
                 this.ctx.font = `600 ${32 * s}px 'Outfit', sans-serif`;
+                this.ctx.shadowBlur = 0;
                 this.ctx.fillText(`SCORE: ${this.lastScore} | TIME: ${this.finalTime}S`, this.canvas.width / 2, this.canvas.height / 2 - 20 * s);
             } else {
                 this.ctx.fillText("Anyone for Pong?", this.canvas.width / 2, this.canvas.height / 2 - 20 * s);

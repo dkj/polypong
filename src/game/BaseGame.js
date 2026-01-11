@@ -17,6 +17,7 @@ export class BaseGame {
         this.difficulty = 1.0;
         this.rotationDirection = 1;
         this.countdownTimer = 0;
+        this.celebrationTimer = 0;
     }
 
     /**
@@ -55,7 +56,12 @@ export class BaseGame {
      * @param {number} dt 
      */
     updateGameRules(dt) {
-        if (this.gameState === 'SCORING') return;
+        if (this.celebrationTimer > 0) {
+            this.celebrationTimer -= dt;
+            if (this.celebrationTimer < 0) this.celebrationTimer = 0;
+        }
+
+        if (this.gameState === 'SCORING' && this.celebrationTimer <= 0) return;
 
         if (this.gameState === 'COUNTDOWN') {
             this.countdownTimer -= dt;
@@ -161,7 +167,14 @@ export class BaseGame {
         this.score++;
     }
     onWallBounce(_edgeIndex) { }
-    onGoal(_edgeIndex) { }
+    onGoal(_edgeIndex) {
+        this.startCelebration();
+    }
+
+    startCelebration() {
+        this.gameState = 'SCORING';
+        this.celebrationTimer = 2.5;
+    }
 
     reflectBall(p1, p2) {
         const mx = (p1.x + p2.x) / 2;

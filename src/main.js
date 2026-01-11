@@ -22,6 +22,9 @@ document.querySelector('#app').innerHTML = `
       MULTIPLAYER (ONLINE)
     </button>
     `}
+    <button id="shareScoreBtn" class="btn btn-secondary" style="display: none;">
+      SHARE SCORE
+    </button>
     <button id="shareMenuBtn" class="btn btn-secondary">
       SHARE APP
     </button>
@@ -83,10 +86,13 @@ registerSW({
   },
 });
 
-// Auto-close modal when game starts
+// Update UI when game state changes
 game.onStateChange = (state) => {
   if (state === 'COUNTDOWN' || state === 'PLAYING') {
     closeShareModal();
+    document.getElementById('shareScoreBtn').style.display = 'none';
+  } else if (state === 'SCORING' && game.hasPlayed && game.celebrationTimer <= 0) {
+    document.getElementById('shareScoreBtn').style.display = 'block';
   }
 };
 
@@ -119,13 +125,13 @@ const shareTitle = document.getElementById('shareTitle');
 const shareUrlInput = document.getElementById('shareUrlInput');
 const qrCanvas = document.getElementById('shareQRCanvas');
 
-function openShareModal(url, isInvite = false) {
+function openShareModal(url, isInvite = false, customText = null) {
   shareTitle.innerText = isInvite ? 'INVITE TO GAME' : 'SHARE Polypongon';
   shareUrlInput.value = url;
   shareManager.renderQRCode(qrCanvas, url);
 
   // Update social links
-  const links = shareManager.getSocialLinks(url, isInvite);
+  const links = shareManager.getSocialLinks(url, isInvite, customText);
   document.getElementById('shareTwitter').href = links.twitter;
   document.getElementById('shareBluesky').href = links.bluesky;
   document.getElementById('shareFacebook').href = links.facebook;
@@ -176,12 +182,25 @@ window.addEventListener('popstate', (e) => {
 });
 
 const shareMenuBtn = document.getElementById('shareMenuBtn');
+const shareScoreBtn = document.getElementById('shareScoreBtn');
+
 shareMenuBtn.addEventListener('click', () => {
   if (game.mode === 'online') {
     openShareModal(window.location.href, true);
   } else {
     openShareModal(window.location.origin, false);
   }
+});
+
+shareScoreBtn.addEventListener('click', () => {
+  const isMulti = game.mode === 'online';
+  const subject = isMulti ? 'We' : 'I';
+  const url = isMulti ? window.location.href : window.location.origin;
+  let resultText = `${subject} survived ${game.finalTime} seconds with a score of ${game.lastScore} !`;
+  if (isMulti) {
+    resultText += ` Join us at`;
+  }
+  openShareModal(url, false, resultText);
 });
 
 document.getElementById('copyBtn').addEventListener('click', async () => {
@@ -196,7 +215,21 @@ document.getElementById('copyBtn').addEventListener('click', async () => {
 
 document.getElementById('webShareBtn').addEventListener('click', () => {
   const isInvite = shareTitle.innerText.includes('INVITE');
-  shareManager.share(shareUrlInput.value, isInvite);
+  // Check if we are sharing a score by checking if the button was clicked? 
+  // Actually, we can just use the current custom text if we store it.
+  // For simplicity, let's just pass the context.
+  const isScore = shareTitle.innerText.includes('SHARE') && game.gameState === 'SCORING';
+  let customText = null;
+  if (isScore && game.hasPlayed) {
+    const isMulti = game.mode === 'online';
+    const subject = isMulti ? 'We' : 'I';
+    const url = shareUrlInput.value;
+    customText = `${subject} survived ${game.finalTime} seconds with a score of ${game.lastScore} !`;
+    if (isMulti) {
+      customText += ` Join us at`;
+    }
+  }
+  shareManager.share(shareUrlInput.value, isInvite, customText);
 });
 
 // Helper function to fetch instance info from server
