@@ -182,9 +182,6 @@ export class Game extends BaseGame {
         this.hasPlayed = true;
         this.hideMenu();
 
-        // Don't show menu immediately
-        // this.showMenu('PLAY AGAIN');
-
         if (this.onStateChange) {
             this.onStateChange(this.gameState);
         }
@@ -193,6 +190,12 @@ export class Game extends BaseGame {
         this.difficulty = 1.0;
         this.score = 0;
         this.timeElapsed = 0;
+    }
+
+    clearResults() {
+        this.lastScore = 0;
+        this.finalTime = 0;
+        this.hasPlayed = false;
     }
 
     resetLocalGame() {
@@ -211,6 +214,7 @@ export class Game extends BaseGame {
 
     startMultiplayer(roomId, instanceId = null) {
         console.log('Attempting to connect to server...');
+        this.clearResults();
         this.mode = 'online';
 
         // Build query parameters for instance routing
@@ -344,7 +348,7 @@ export class Game extends BaseGame {
 
         // Reset to initial menu state instead of immediately starting
         this.setGameState('SCORING');
-        this.hasPlayed = false;
+        this.clearResults();
         this.showMenu('START GAME');
 
         // Reset polygon and paddles for local play
@@ -363,6 +367,7 @@ export class Game extends BaseGame {
         this.setGameState('SCORING');
         this.terminationReason = null;
         this.stateBuffer = [];
+        this.clearResults();
         this.startMultiplayer(this.currentRoomId, this.currentInstanceId);
     }
 

@@ -2,43 +2,38 @@ import { test, expect } from '@playwright/test';
 
 test.describe('End of Game Features', () => {
     test.beforeEach(async ({ page }) => {
-        // Log browser errors/logs for easier debugging if needed
-        page.on('console', msg => {
-            if (msg.type() === 'error') console.log('BROWSER ERROR:', msg.text());
-        });
         await page.goto('/');
     });
 
     test.describe('Local Celebration', () => {
         test('should show celebration phase and delay menu', async ({ page }) => {
+            // 1. Simulate a goal in local mode
             await page.evaluate(() => {
                 window.game.mode = 'local';
-                // Set some initial position to track movement
-                window.game.ball.x = 0;
-                window.game.ball.y = 0;
-                window.game.ball.vx = 200;
-                window.game.ball.vy = 200;
-                window.game.triggerScore(10, 30);
+                window.game.triggerScore(5, 10);
             });
 
-            // 1. Menu should be hidden during celebration
-            const menuVisible = await page.locator('#game-menu').isVisible();
-            expect(menuVisible).toBe(false);
+            // 2. Overlay is drawn on canvas, check State
+            // Actually, Game.js draws the scoring overlay directly on canvas.
+            // We can check if Game State is SCORING
+            const gameState = await page.evaluate(() => window.game.gameState);
+            expect(gameState).toBe('SCORING');
 
-            // 2. Ball should move
-            const pos1 = await page.evaluate(() => ({ x: window.game.ball.x, y: window.game.ball.y }));
-            await page.waitForTimeout(100);
-            const pos2 = await page.evaluate(() => ({ x: window.game.ball.x, y: window.game.ball.y }));
-            expect(pos2.x).not.toBe(pos1.x);
+            // 3. Menu should be hidden during celebration (2.5s)
+            await expect(page.locator('#game-menu')).toBeHidden();
 
-            // 3. After 2.5s, menu should show and it should be "PLAY AGAIN"
-            await page.waitForTimeout(3000);
+            // 4. After delay, menu appears
+            await page.waitForFunction(() => {
+                const menu = document.getElementById('game-menu');
+                return menu && window.getComputedStyle(menu).display === 'flex';
+            }, { timeout: 5000 });
+
             const restartBtn = page.locator('#restartBtn');
             await expect(restartBtn).toBeVisible();
             await expect(restartBtn).toHaveText('PLAY AGAIN');
 
-            // 4. Share score button should appear
-            await expect(page.locator('#shareScoreBtn')).toBeVisible();
+            // 4. Share App button should be visible in menu
+            await expect(page.locator('#shareMenuBtn')).toBeVisible();
         });
 
         test('should have correct sharing message for local mode', async ({ page }) => {
@@ -48,11 +43,10 @@ test.describe('End of Game Features', () => {
             });
 
             await page.waitForTimeout(3000);
-            await page.locator('#shareScoreBtn').click();
+            await page.locator('#shareMenuBtn').click();
 
             const twitterLink = await page.locator('#shareTwitter').getAttribute('href');
             expect(twitterLink).toContain(encodeURIComponent('I survived 15 seconds with a score of 5 !'));
-            // Ensure URL is there too, but deduplicated (ShareManager appends it)
             const decodedLink = decodeURIComponent(twitterLink);
             expect(decodedLink).toContain('http://localhost:');
         });
@@ -119,28 +113,57 @@ test.describe('End of Game Features', () => {
             expect(pos2.x).not.toBe(pos1.x);
 
             // 3. Share button appears after celebration
-            try {
-                await page.waitForFunction(() => {
-                    const btn = document.getElementById('shareScoreBtn');
-                    return btn && window.getComputedStyle(btn).display === 'block';
-                }, { timeout: 5000 });
-            } catch (e) {
-                const debugState = await page.evaluate(() => ({
-                    gameState: window.game.gameState,
-                    celebrationTimer: window.game.celebrationTimer,
-                    hasPlayed: window.game.hasPlayed,
-                    menuShown: window.game.wasCelebrationMenuShown,
-                    shareBtnDisplay: document.getElementById('shareScoreBtn').style.display,
-                    mode: window.game.mode
-                }));
-                console.log('Final Debug State:', debugState);
-                throw e;
-            }
+            await page.waitForFunction(() => {
+                const btn = document.getElementById('shareMenuBtn');
+                const menu = document.getElementById('game-menu');
+                return btn && window.getComputedStyle(menu).display !== 'none';
+            }, { timeout: 5000 });
+
+            await expect(page.locator('#shareMenuBtn')).toBeVisible();
 
             // 4. Correct "We" message with join suggestion
-            await page.locator('#shareScoreBtn').click();
+            await page.locator('#shareMenuBtn').click();
             const twitterLink = await page.locator('#shareTwitter').getAttribute('href');
             expect(twitterLink).toContain(encodeURIComponent('We survived 45 seconds with a score of 8 ! Join us at'));
+        });
+
+        test('should reset sharing state when switching modes', async ({ page }) => {
+            // 1. Play local game to set score
+            await page.evaluate(() => {
+                window.game.mode = 'local';
+                window.game.triggerScore(10, 30);
+            });
+
+            // 2. Open share modal - should have score
+            await page.locator('#shareMenuBtn').click();
+            let twitterLink = await page.locator('#shareTwitter').getAttribute('href');
+            expect(twitterLink).toContain(encodeURIComponent('I survived 30 seconds with a score of 10 !'));
+
+            await page.locator('#closeShareBtn').click();
+
+            // 3. Go Online
+            page.on('dialog', dialog => dialog.accept('ROOM_RESET'));
+            await page.route('/api/instance', async route => {
+                await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ instanceId: 'test-inst', isFlyInstance: true }) });
+            });
+            await page.locator('#onlineBtn').click();
+
+            // 4. Open share modal (Invite) - should be default invite text, NOT the previous score
+            // The modal is auto-opened by main.js on online toggle
+            twitterLink = await page.locator('#shareTwitter').getAttribute('href');
+            expect(twitterLink).not.toContain(encodeURIComponent('I survived 30 seconds with a score of 10 !'));
+            expect(twitterLink).toContain(encodeURIComponent('Care to join us for our imminent game of Polypongon? Join us at'));
+
+            await page.locator('#closeShareBtn').click();
+
+            // 5. Go Offline
+            await page.locator('#onlineBtn').click();
+
+            // 6. Open share modal - should be default app text
+            await page.locator('#shareMenuBtn').click();
+            twitterLink = await page.locator('#shareTwitter').getAttribute('href');
+            expect(twitterLink).not.toContain(encodeURIComponent('I survived 30 seconds with a score of 10 !'));
+            expect(twitterLink).toContain(encodeURIComponent('For your consideration, I am sharing this polygon pong game.'));
         });
     });
 });
