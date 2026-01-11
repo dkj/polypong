@@ -124,7 +124,7 @@ test.describe('Sharing Functionality', () => {
         // Set game to SCORING state so Enter would normally start it
         await page.evaluate(() => {
             window.game.gameState = 'SCORING';
-            window.game.showMenu('START GAME');
+            window.game.setMenuVisible(true, 'START GAME');
         });
 
         await page.locator('#shareMenuBtn').click();
@@ -163,7 +163,7 @@ test.describe('Sharing Functionality', () => {
         // Set game to SCORING state so Enter would normally start it
         await page.evaluate(() => {
             window.game.gameState = 'SCORING';
-            window.game.showMenu('START GAME');
+            window.game.setMenuVisible(true, 'START GAME');
         });
 
         const shareBtn = page.locator('#shareMenuBtn');

@@ -98,7 +98,7 @@ test.describe('End of Game Features', () => {
 
                 // Keep socket listeners active to trigger them manually
 
-                window.game.hideMenu();
+                window.game.setMenuVisible(false);
             });
 
             // 1. Menu hidden

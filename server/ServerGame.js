@@ -133,23 +133,7 @@ export class ServerGame extends BaseGame {
     }
 
     update(dt) {
-        if (this.gameState === 'SCORING' && this.celebrationTimer <= 0) return;
-
-        const prevBallX = this.ball.x;
-        const prevBallY = this.ball.y;
-
-        const wasCelebrationRunning = this.gameState === 'SCORING' && this.celebrationTimer > 0;
-        super.updateGameRules(dt);
-        const isCelebrationDone = wasCelebrationRunning && this.celebrationTimer <= 0;
-
-        if (this.gameState === 'PLAYING' || (this.gameState === 'SCORING' && this.celebrationTimer > 0)) {
-            // Move Ball
-            this.ball.update(dt);
-        }
-
-        if (isCelebrationDone) {
-            this.checkAllReady();
-        }
+        super.update(dt);
 
         // Update Paddles Movement (Server specific)
         this.paddles.forEach(p => {
@@ -157,10 +141,10 @@ export class ServerGame extends BaseGame {
                 p.move(p.moveDirection, dt);
             }
         });
+    }
 
-        if (this.gameState === 'PLAYING') {
-            super.checkCollisions(prevBallX, prevBallY);
-        }
+    onCelebrationEnd() {
+        this.checkAllReady();
     }
 
     // --- Hooks ---
@@ -180,9 +164,8 @@ export class ServerGame extends BaseGame {
 
     triggerScore(finalScore, edgeIndex) {
         this.startCelebration();
-        this.lastScore = finalScore; // This is now bounce count
+        this.lastScore = finalScore;
         this.finalTime = Math.floor(this.timeElapsed);
-        this.scoreDisplayTimer = 0;
 
         this.io.to(this.roomId).emit('gameEvent', {
             type: 'goal',

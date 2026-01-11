@@ -13,11 +13,19 @@ export class BaseGame {
         this.gameState = 'SCORING';
         this.score = 0;
         this.lastScore = 0;
+        this.finalTime = 0;
         this.timeElapsed = 0;
         this.difficulty = 1.0;
         this.rotationDirection = 1;
         this.countdownTimer = 0;
         this.celebrationTimer = 0;
+        this.hasPlayed = false;
+    }
+
+    clearResults() {
+        this.lastScore = 0;
+        this.finalTime = 0;
+        this.hasPlayed = false;
     }
 
     /**
@@ -52,13 +60,12 @@ export class BaseGame {
 
     /**
      * Updates game rules (difficulty, polygon rotation, ball speed capping).
-     * Does NOT move paddles or update ball position (allows subclass control over step order).
      * @param {number} dt 
      */
     updateGameRules(dt) {
         if (this.celebrationTimer > 0) {
-            this.celebrationTimer -= dt;
-            if (this.celebrationTimer < 0) this.celebrationTimer = 0;
+            this.celebrationTimer = Math.max(0, this.celebrationTimer - dt);
+            if (this.celebrationTimer === 0) this.onCelebrationEnd();
         }
 
         if (this.gameState === 'SCORING' && this.celebrationTimer <= 0) return;
@@ -93,6 +100,27 @@ export class BaseGame {
             GAME_CONSTANTS.PADDLE_WIDTH_BASE / (this.difficulty * GAME_CONSTANTS.PADDLE_WIDTH_DIFFICULTY_FACTOR)
         );
         this.paddles.forEach(p => p.width = targetWidth);
+    }
+
+    /**
+     * Standard game update loop.
+     * @param {number} dt 
+     */
+    update(dt) {
+        if (this.gameState === 'SCORING' && this.celebrationTimer <= 0) return;
+
+        const prevBallX = this.ball.x;
+        const prevBallY = this.ball.y;
+
+        this.updateGameRules(dt);
+
+        if (this.gameState === 'PLAYING' || (this.gameState === 'SCORING' && this.celebrationTimer > 0)) {
+            this.ball.update(dt);
+        }
+
+        if (this.gameState === 'PLAYING') {
+            this.checkCollisions(prevBallX, prevBallY);
+        }
     }
 
     checkCollisions(prevX, prevY) {
@@ -175,6 +203,8 @@ export class BaseGame {
         this.gameState = 'SCORING';
         this.celebrationTimer = 2.5;
     }
+
+    onCelebrationEnd() { }
 
     reflectBall(p1, p2) {
         const mx = (p1.x + p2.x) / 2;
