@@ -7,11 +7,53 @@
   <link rel="apple-touch-icon" href="/pwa-192x192.png">
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#1a1a1a" />
-  <title>Polypongon</title>
+  <title>Polypongon - Multi-Sided Online Pong Game</title>
+  <meta name="description"
+    content="Play Polypongon, a unique multi-sided pong game. Join online multiplayer matches with up to 4 other players or challenge yourself in single-player mode. Fast, competitive, and free to play!" />
+  <link rel="canonical" href="https://polypongon.uk/" />
+
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://polypongon.uk/" />
+  <meta property="og:title" content="Polypongon - Multi-Sided Online Pong Game" />
+  <meta property="og:description"
+    content="Experience a unique twist on the classic Pong. Play with friends in a multi-sided arena. Fast-paced multiplayer action directly in your browser." />
+  <meta property="og:image" content="https://polypongon.uk/pwa-512x512.png" />
+
+  <!-- Twitter -->
+  <meta property="twitter:card" content="summary_large_image" />
+  <meta property="twitter:url" content="https://polypongon.uk/" />
+  <meta property="twitter:title" content="Polypongon - Multi-Sided Online Pong Game" />
+  <meta property="twitter:description"
+    content="Experience a unique twist on the classic Pong. Play with friends in a multi-sided arena. Fast-paced multiplayer action directly in your browser." />
+  <meta property="twitter:image" content="https://polypongon.uk/pwa-512x512.png" />
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "VideoGame",
+    "name": "Polypongon",
+    "url": "https://polypongon.uk/",
+    "image": "https://polypongon.uk/pwa-512x512.png",
+    "description": "A unique multi-sided pong game. Play with up to 4 other players online or solo. Fast-paced, browser-based action.",
+    "genre": "Arcade, Sports",
+    "applicationCategory": "Game",
+    "operatingSystem": "Web Browser",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    }
+  }
+  </script>
 </head>
 
 <body>
-  <div id="app"></div>
+  <div id="app">
+    <h1>Polypongon</h1>
+    <p>A multi-sided online pong game. Play against friends or AI in a circular arena.</p>
+    <p>Features online multiplayer, single-player mode, and fast-paced arcade action.</p>
+  </div>
   <script type="module" src="/src/main.js"></script>
 </body>
 
