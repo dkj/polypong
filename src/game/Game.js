@@ -186,6 +186,7 @@ export class Game extends BaseGame {
     }
 
     onCelebrationEnd() {
+        super.onCelebrationEnd();
         if (this.ball) {
             this.ball.maxTrailLength = 20;
         }
@@ -470,11 +471,6 @@ export class Game extends BaseGame {
             this.ball.maxTrailLength = 200;
         }
         this.triggerScore(this.score, Math.floor(this.timeElapsed));
-
-        // Reset local stats immediately
-        this.difficulty = 1.0;
-        this.score = 0;
-        this.timeElapsed = 0;
     }
 
     // --------------------------
