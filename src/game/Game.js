@@ -24,6 +24,7 @@ export class Game extends BaseGame {
 
         this.onStateChange = null;
         this.serverClockOffset = 0; // Estimated difference: serverTime - clientTime
+        this.localHistory = []; // { position, timestamp } stores for local reconciliation
 
         window.addEventListener('resize', () => this.resize());
 
@@ -486,6 +487,22 @@ export class Game extends BaseGame {
     handleOnlineInput(dt) {
         if (!this.socket) return;
 
+        // Record current local state for reconciliation before we apply new frames
+        if (this.playerIndex !== -1 && this.paddles.length > 0) {
+            const myPaddle = this.paddles.find(p => p.edgeIndex === this.playerIndex);
+            if (myPaddle) {
+                this.localHistory.push({
+                    position: myPaddle.position,
+                    timestamp: Date.now() + this.serverClockOffset
+                });
+                // Keep small history buffer (e.g. 500ms)
+                const limit = Date.now() + this.serverClockOffset - 500;
+                while (this.localHistory.length > 0 && this.localHistory[0].timestamp < limit) {
+                    this.localHistory.shift();
+                }
+            }
+        }
+
         this.applyInterpolation();
         super.updateGameRules(dt);
 
@@ -557,20 +574,36 @@ export class Game extends BaseGame {
 
         this.paddles = s1.paddles.map(pData1 => {
             if (this.playerIndex !== -1 && pData1.edgeIndex === this.playerIndex) {
-                // LOCAL PLAYER: Use predictive local state
+                // LOCAL PLAYER: Use predictive local state with reconciliation
                 let myPaddle = this.paddles.find(p => p.edgeIndex === this.playerIndex);
                 if (!myPaddle) myPaddle = new Paddle(pData1.edgeIndex);
 
-                // Sync metadata (width/difficulty) but NOT position (to keep controls snappy)
+                // Sync metadata (width/difficulty)
                 myPaddle.width = pData1.width ?? Math.max(0.1, 0.4 / (this.difficulty * 0.8));
 
-                // Only snap position if we are wildly out of sync with the NEWEST packet
-                const newestState = this.stateBuffer[this.stateBuffer.length - 1];
-                const newestPData = newestState.paddles.find(p => p.edgeIndex === this.playerIndex);
-                if (newestPData) {
-                    const drift = Math.abs(myPaddle.position - newestPData.position);
-                    if (drift > 0.1) { // 10% of the edge is a big enough error to warrant a snap
-                        myPaddle.position = newestPData.position;
+                // Reconciliation: Find what our position was at the server's renderTimestamp
+                // and compare it to the server's interpolated position.
+                const interpolatedServerPos = (s0.paddles.find(pp => pp.edgeIndex === this.playerIndex)?.position !== undefined)
+                    ? lerp(s0.paddles.find(pp => pp.edgeIndex === this.playerIndex).position, pData1.position, t)
+                    : pData1.position;
+
+                // Find entry in history closest to renderTimestamp
+                let closest = null;
+                let minDiff = Infinity;
+                for (const entry of this.localHistory) {
+                    const diff = Math.abs(entry.timestamp - renderTimestamp);
+                    if (diff < minDiff) {
+                        minDiff = diff;
+                        closest = entry;
+                    }
+                }
+
+                if (closest && minDiff < 50) { // Only reconcile if we have a reasonably close history point
+                    const error = interpolatedServerPos - closest.position;
+                    // Apply smooth correction factor to current position
+                    // 0.1 means we fix 10% of the drift per frame
+                    if (Math.abs(error) > 0.001) {
+                        myPaddle.position += error * 0.1;
                     }
                 }
 
