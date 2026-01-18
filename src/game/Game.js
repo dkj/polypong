@@ -208,6 +208,7 @@ export class Game extends BaseGame {
         console.log('Attempting to connect to server...');
         this.clearResults();
         this.mode = 'online';
+        this.serverClockOffset = 0;
 
         // Build query parameters for instance routing
         const query = {};
@@ -255,12 +256,14 @@ export class Game extends BaseGame {
 
             // Sync clock: estimate offset (accounting for latency is hard, but simple offset helps)
             // Initializing with the first packet and then smoothing updates.
-            const currentOffset = state.timestamp - Date.now();
-            if (this.stateBuffer.length === 1) {
-                this.serverClockOffset = currentOffset;
-            } else {
-                // Smoothly adjust offset to filter out jitter
-                this.serverClockOffset = this.serverClockOffset * 0.99 + currentOffset * 0.01;
+            if (state.timestamp) {
+                const currentOffset = state.timestamp - Date.now();
+                if (this.serverClockOffset === 0) {
+                    this.serverClockOffset = currentOffset;
+                } else {
+                    // Smoothly adjust offset to filter out jitter
+                    this.serverClockOffset = this.serverClockOffset * 0.99 + currentOffset * 0.01;
+                }
             }
 
             this.difficulty = state.difficulty;
@@ -348,6 +351,7 @@ export class Game extends BaseGame {
         this.playerIndex = -1;
         this.currentRoomId = null;
         this.currentInstanceId = null;
+        this.serverClockOffset = 0;
 
         // Reset to initial menu state instead of immediately starting
         this.setGameState('SCORING');
@@ -553,18 +557,27 @@ export class Game extends BaseGame {
 
         this.paddles = s1.paddles.map(pData1 => {
             if (this.playerIndex !== -1 && pData1.edgeIndex === this.playerIndex) {
+                // LOCAL PLAYER: Use predictive local state
                 let myPaddle = this.paddles.find(p => p.edgeIndex === this.playerIndex);
                 if (!myPaddle) myPaddle = new Paddle(pData1.edgeIndex);
+
+                // Sync metadata (width/difficulty) but NOT position (to keep controls snappy)
                 myPaddle.width = pData1.width ?? Math.max(0.1, 0.4 / (this.difficulty * 0.8));
-                const serverPos = pData1.position;
-                const drift = Math.abs(myPaddle.position - serverPos);
-                if (drift > 0.01) {
-                    const blendFactor = Math.min(0.3, drift * 2);
-                    myPaddle.position = myPaddle.position + (serverPos - myPaddle.position) * blendFactor;
+
+                // Only snap position if we are wildly out of sync with the NEWEST packet
+                const newestState = this.stateBuffer[this.stateBuffer.length - 1];
+                const newestPData = newestState.paddles.find(p => p.edgeIndex === this.playerIndex);
+                if (newestPData) {
+                    const drift = Math.abs(myPaddle.position - newestPData.position);
+                    if (drift > 0.1) { // 10% of the edge is a big enough error to warrant a snap
+                        myPaddle.position = newestPData.position;
+                    }
                 }
+
                 return myPaddle;
             }
 
+            // OTHER PLAYERS: Use standard 100ms interpolation
             const p = new Paddle(pData1.edgeIndex);
             const pData0 = s0.paddles.find(pp => pp.edgeIndex === pData1.edgeIndex);
             if (pData0) {
