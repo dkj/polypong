@@ -24,6 +24,7 @@ export class Game extends BaseGame {
 
         this.onStateChange = null;
         this.serverClockOffset = 0; // Estimated difference: serverTime - clientTime
+        this.localHistory = []; // { position, timestamp } stores for local reconciliation
 
         window.addEventListener('resize', () => this.resize());
 
@@ -209,6 +210,7 @@ export class Game extends BaseGame {
         console.log('Attempting to connect to server...');
         this.clearResults();
         this.mode = 'online';
+        this.serverClockOffset = 0;
 
         // Build query parameters for instance routing
         const query = {};
@@ -256,12 +258,14 @@ export class Game extends BaseGame {
 
             // Sync clock: estimate offset (accounting for latency is hard, but simple offset helps)
             // Initializing with the first packet and then smoothing updates.
-            const currentOffset = state.timestamp - Date.now();
-            if (this.stateBuffer.length === 1) {
-                this.serverClockOffset = currentOffset;
-            } else {
-                // Smoothly adjust offset to filter out jitter
-                this.serverClockOffset = this.serverClockOffset * 0.99 + currentOffset * 0.01;
+            if (state.timestamp) {
+                const currentOffset = state.timestamp - Date.now();
+                if (this.serverClockOffset === 0) {
+                    this.serverClockOffset = currentOffset;
+                } else {
+                    // Smoothly adjust offset to filter out jitter
+                    this.serverClockOffset = this.serverClockOffset * 0.99 + currentOffset * 0.01;
+                }
             }
 
             this.difficulty = state.difficulty;
@@ -349,6 +353,7 @@ export class Game extends BaseGame {
         this.playerIndex = -1;
         this.currentRoomId = null;
         this.currentInstanceId = null;
+        this.serverClockOffset = 0;
 
         // Reset to initial menu state instead of immediately starting
         this.setGameState('SCORING');
@@ -478,6 +483,22 @@ export class Game extends BaseGame {
     handleOnlineInput(dt) {
         if (!this.socket) return;
 
+        // Record current local state for reconciliation before we apply new frames
+        if (this.playerIndex !== -1 && this.paddles.length > 0) {
+            const myPaddle = this.paddles.find(p => p.edgeIndex === this.playerIndex);
+            if (myPaddle) {
+                this.localHistory.push({
+                    position: myPaddle.position,
+                    timestamp: Date.now() + this.serverClockOffset
+                });
+                // Keep small history buffer (e.g. 500ms)
+                const limit = Date.now() + this.serverClockOffset - 500;
+                while (this.localHistory.length > 0 && this.localHistory[0].timestamp < limit) {
+                    this.localHistory.shift();
+                }
+            }
+        }
+
         this.applyInterpolation();
         super.updateGameRules(dt);
 
@@ -549,18 +570,43 @@ export class Game extends BaseGame {
 
         this.paddles = s1.paddles.map(pData1 => {
             if (this.playerIndex !== -1 && pData1.edgeIndex === this.playerIndex) {
+                // LOCAL PLAYER: Use predictive local state with reconciliation
                 let myPaddle = this.paddles.find(p => p.edgeIndex === this.playerIndex);
                 if (!myPaddle) myPaddle = new Paddle(pData1.edgeIndex);
+
+                // Sync metadata (width/difficulty)
                 myPaddle.width = pData1.width ?? Math.max(0.1, 0.4 / (this.difficulty * 0.8));
-                const serverPos = pData1.position;
-                const drift = Math.abs(myPaddle.position - serverPos);
-                if (drift > 0.01) {
-                    const blendFactor = Math.min(0.3, drift * 2);
-                    myPaddle.position = myPaddle.position + (serverPos - myPaddle.position) * blendFactor;
+
+                // Reconciliation: Find what our position was at the server's renderTimestamp
+                // and compare it to the server's interpolated position.
+                const interpolatedServerPos = (s0.paddles.find(pp => pp.edgeIndex === this.playerIndex)?.position !== undefined)
+                    ? lerp(s0.paddles.find(pp => pp.edgeIndex === this.playerIndex).position, pData1.position, t)
+                    : pData1.position;
+
+                // Find entry in history closest to renderTimestamp
+                let closest = null;
+                let minDiff = Infinity;
+                for (const entry of this.localHistory) {
+                    const diff = Math.abs(entry.timestamp - renderTimestamp);
+                    if (diff < minDiff) {
+                        minDiff = diff;
+                        closest = entry;
+                    }
                 }
+
+                if (closest && minDiff < 50) { // Only reconcile if we have a reasonably close history point
+                    const error = interpolatedServerPos - closest.position;
+                    // Apply smooth correction factor to current position
+                    // 0.1 means we fix 10% of the drift per frame
+                    if (Math.abs(error) > 0.001) {
+                        myPaddle.position += error * 0.1;
+                    }
+                }
+
                 return myPaddle;
             }
 
+            // OTHER PLAYERS: Use standard 100ms interpolation
             const p = new Paddle(pData1.edgeIndex);
             const pData0 = s0.paddles.find(pp => pp.edgeIndex === pData1.edgeIndex);
             if (pData0) {
