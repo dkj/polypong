@@ -264,6 +264,7 @@ export class Game extends BaseGame {
             }
 
             this.difficulty = state.difficulty;
+            this.rotationDirection = state.rotationDirection;
             const oldTimer = this.celebrationTimer;
             if (state.celebrationTimer !== undefined) {
                 this.celebrationTimer = state.celebrationTimer;
@@ -544,7 +545,7 @@ export class Game extends BaseGame {
         if (renderTimestamp > s1.timestamp) {
             // Extrapolate rotation if we're ahead
             const dt = (renderTimestamp - s1.timestamp) / 1000;
-            this.polygon.rotation = s1.rotation + (this.polygon.rotationSpeed || 0) * dt;
+            this.polygon.rotation = s1.rotation + (s1.rotationSpeed || 0) * dt;
         } else {
             this.polygon.rotation = lerp(s0.rotation, s1.rotation, t);
         }
