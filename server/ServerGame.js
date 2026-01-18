@@ -150,6 +150,7 @@ export class ServerGame extends BaseGame {
     }
 
     onCelebrationEnd() {
+        super.onCelebrationEnd();
         this.checkAllReady();
     }
 

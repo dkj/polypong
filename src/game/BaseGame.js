@@ -87,9 +87,11 @@ export class BaseGame {
             return;
         }
 
-        this.timeElapsed += dt;
-
-        this.difficulty = 1 + this.timeElapsed / GAME_CONSTANTS.DIFFICULTY_RAMP;
+        // Only progress difficulty and time during active play
+        if (this.gameState === 'PLAYING') {
+            this.timeElapsed += dt;
+            this.difficulty = 1 + this.timeElapsed / GAME_CONSTANTS.DIFFICULTY_RAMP;
+        }
 
         this.polygon.rotationSpeed = GAME_CONSTANTS.ROTATION_SPEED_BASE * this.difficulty * this.rotationDirection;
         this.polygon.update(dt);
@@ -212,7 +214,12 @@ export class BaseGame {
         this.celebrationTimer = 2.5;
     }
 
-    onCelebrationEnd() { }
+    onCelebrationEnd() {
+        this.difficulty = 1.0;
+        this.score = 0;
+        this.timeElapsed = 0;
+        this.paddles.forEach(p => p.width = 0.5);
+    }
 
     reflectBall(p1, p2) {
         const mx = (p1.x + p2.x) / 2;
