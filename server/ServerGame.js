@@ -212,7 +212,7 @@ export class ServerGame extends BaseGame {
 
     broadcastState() {
         this.io.to(this.roomId).emit('gameState', {
-            ball: { x: this.ball.x, y: this.ball.y },
+            ball: { x: this.ball.x, y: this.ball.y, vx: this.ball.vx, vy: this.ball.vy },
             rotation: this.polygon.rotation,
             paddles: this.paddles.map(p => ({ edgeIndex: p.edgeIndex, position: p.position, width: p.width })),
             readyEdges: Array.from(this.readyEdges),

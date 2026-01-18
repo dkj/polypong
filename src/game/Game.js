@@ -23,6 +23,7 @@ export class Game extends BaseGame {
         this.readyEdges = [];
 
         this.onStateChange = null;
+        this.serverClockOffset = 0; // Estimated difference: serverTime - clientTime
 
         window.addEventListener('resize', () => this.resize());
 
@@ -247,13 +248,19 @@ export class Game extends BaseGame {
         this.stateBuffer = [];
 
         this.socket.on('gameState', (state) => {
-            if (this.stateBuffer.length === 0 && this.gameState !== state.gameState) {
-                // First state update
-            }
-
             this.stateBuffer.push(state);
             if (this.stateBuffer.length > 30) {
                 this.stateBuffer.shift();
+            }
+
+            // Sync clock: estimate offset (accounting for latency is hard, but simple offset helps)
+            // Initializing with the first packet and then smoothing updates.
+            const currentOffset = state.timestamp - Date.now();
+            if (this.stateBuffer.length === 1) {
+                this.serverClockOffset = currentOffset;
+            } else {
+                // Smoothly adjust offset to filter out jitter
+                this.serverClockOffset = this.serverClockOffset * 0.99 + currentOffset * 0.01;
             }
 
             this.difficulty = state.difficulty;
@@ -500,7 +507,7 @@ export class Game extends BaseGame {
     applyInterpolation() {
         if (this.stateBuffer.length < 2) return;
 
-        const now = Date.now();
+        const now = Date.now() + this.serverClockOffset;
         const renderTimestamp = now - 100;
         let s0 = this.stateBuffer[0];
         let s1 = this.stateBuffer[1];
@@ -512,22 +519,35 @@ export class Game extends BaseGame {
             i++;
         }
 
-        if (renderTimestamp > s1.timestamp) s0 = s1;
-        else if (renderTimestamp < s0.timestamp) s1 = s0;
-
+        const lerp = (a, b, t) => a + (b - a) * t;
         let t = 0;
         if (s1.timestamp > s0.timestamp) {
             t = (renderTimestamp - s0.timestamp) / (s1.timestamp - s0.timestamp);
         }
         t = Math.max(0, Math.min(1, t));
 
-        const lerp = (a, b, t) => a + (b - a) * t;
+        if (renderTimestamp > s1.timestamp) {
+            // Extrapolate ball if we're ahead of the buffer
+            const dt = (renderTimestamp - s1.timestamp) / 1000;
+            this.ball.x = s1.ball.x + (s1.ball.vx || 0) * dt;
+            this.ball.y = s1.ball.y + (s1.ball.vy || 0) * dt;
+        } else if (renderTimestamp < s0.timestamp) {
+            this.ball.x = s0.ball.x;
+            this.ball.y = s0.ball.y;
+        } else {
+            this.ball.x = lerp(s0.ball.x, s1.ball.x, t);
+            this.ball.y = lerp(s0.ball.y, s1.ball.y, t);
+        }
 
-        this.ball.x = lerp(s0.ball.x, s1.ball.x, t);
-        this.ball.y = lerp(s0.ball.y, s1.ball.y, t);
         this.ball.updateTrail();
 
-        this.polygon.rotation = lerp(s0.rotation, s1.rotation, t);
+        if (renderTimestamp > s1.timestamp) {
+            // Extrapolate rotation if we're ahead
+            const dt = (renderTimestamp - s1.timestamp) / 1000;
+            this.polygon.rotation = s1.rotation + (this.polygon.rotationSpeed || 0) * dt;
+        } else {
+            this.polygon.rotation = lerp(s0.rotation, s1.rotation, t);
+        }
         this.polygon.updateVertices();
 
         this.paddles = s1.paddles.map(pData1 => {
