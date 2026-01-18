@@ -643,6 +643,33 @@ export class Game extends BaseGame {
             this.ctx.lineTo(endX, endY);
             this.ctx.stroke();
 
+            // Visual indicator for local player to distinguish their paddle
+            const isLocalPlayer = (this.mode === 'online' && paddle.edgeIndex === this.playerIndex) ||
+                (this.mode === 'local');
+
+            if (isLocalPlayer) {
+                const midX = (startX + endX) / 2;
+                const midY = (startY + endY) / 2;
+                const angle = Math.atan2(midY, midX);
+
+                this.ctx.save();
+                this.ctx.translate(midX, midY);
+                this.ctx.rotate(angle);
+
+                this.ctx.beginPath();
+                // Small semicircle "bump" on the outer side of the paddle
+                this.ctx.arc(0, 0, 12, -Math.PI / 2, Math.PI / 2);
+                this.ctx.fillStyle = this.getPlayerColor(paddle.edgeIndex, 1);
+                this.ctx.fill();
+
+                // Add a subtle highlight highlight
+                this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+                this.ctx.lineWidth = 2;
+                this.ctx.stroke();
+
+                this.ctx.restore();
+            }
+
             // Ready Indicator for Multiplayer
             if (this.gameState === 'SCORING' && this.mode === 'online' && this.readyEdges.includes(paddle.edgeIndex)) {
                 this.ctx.save();
