@@ -19,24 +19,65 @@ const isFlyInstance = !!process.env.FLY_MACHINE_ID;
 
 console.log(`Running on instance: ${instanceId}${isFlyInstance ? ' (Fly.io)' : ''}`);
 
-// Middleware to handle Fly.io instance routing for WebSocket upgrades
-app.use((req, res, next) => {
-  // Check if this is a WebSocket upgrade request
-  const isWebSocketUpgrade = req.headers.upgrade === 'websocket';
+/**
+ * Intercepts Socket.io requests and upgrades to handle Fly.io instance routing.
+ * This is necessary because Socket.IO intercepts these events before Express,
+ * and Engine.io middleware lacks a functional writeHead() for WebSocket upgrades.
+ */
+const handleFlyInstanceRouting = (req, resOrSocket, isUpgrade) => {
+  try {
+    if (!isFlyInstance) return false;
 
-  if (isWebSocketUpgrade) {
-    const targetInstance = req.query.instance || req.headers['x-fly-instance'];
+    const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+    if (!url.pathname.startsWith('/socket.io/')) return false;
 
-    // If a specific instance is requested and we're not it, replay to the correct instance
-    if (targetInstance && targetInstance !== instanceId && isFlyInstance) {
-      console.log(`Replaying WebSocket connection from ${instanceId} to ${targetInstance}`);
-      res.set('fly-replay', `instance = ${targetInstance}`);
-      return res.status(307).end();
+    const targetInstance = url.searchParams.get('instance') || req.headers['x-fly-instance'];
+
+    if (targetInstance && targetInstance !== instanceId) {
+      console.log(`Replaying ${isUpgrade ? 'WebSocket upgrade' : 'polling request'} from ${instanceId} to ${targetInstance}`);
+
+      if (isUpgrade) {
+        // Upgrade path provides a raw socket; write raw HTTP response.
+        resOrSocket.end(
+          'HTTP/1.1 307 Temporary Redirect\r\n' +
+          `fly-replay: instance=${targetInstance}\r\n` +
+          'Content-Length: 0\r\n' +
+          'Connection: close\r\n' +
+          '\r\n'
+        );
+      } else {
+        // Standard path provides an http.ServerResponse object.
+        resOrSocket.writeHead(307, {
+          'fly-replay': `instance=${targetInstance}`,
+          'Content-Length': '0',
+          'Connection': 'close'
+        });
+        resOrSocket.end();
+      }
+      return true;
     }
+    return false;
+  } catch (err) {
+    console.error('Fly.io routing error:', err);
+    return false;
   }
+};
 
-  next();
-});
+
+
+// Monkey-patch httpServer.emit ONLY on Fly.io to intercept and stop propagation 
+// of requests that need to be replayed to a different instance.
+if (isFlyInstance) {
+  const originalEmit = httpServer.emit;
+  httpServer.emit = function (event, req, resOrSocket) {
+    if (event === 'request' || event === 'upgrade') {
+      if (handleFlyInstanceRouting(req, resOrSocket, event === 'upgrade')) {
+        return true;
+      }
+    }
+    return originalEmit.apply(this, arguments);
+  };
+}
 
 const io = new Server(httpServer, {
   // Allow query parameters to pass through
@@ -44,8 +85,9 @@ const io = new Server(httpServer, {
     const targetInstance = req._query?.instance || req.headers['x-fly-instance'];
 
     // If a specific instance is requested and we're not it, reject
-    if (targetInstance && targetInstance !== instanceId) {
-      console.log(`Rejecting WebSocket: wrong instance(want ${targetInstance}, running ${instanceId})`);
+    // Only enforced on Fly.io to allow local debugging with production URLs
+    if (targetInstance && targetInstance !== instanceId && isFlyInstance) {
+      console.log(`Rejecting socket: wrong instance(want ${targetInstance}, running ${instanceId})`);
       callback('Wrong instance', false);
       return;
     }
@@ -81,8 +123,9 @@ io.on('connection', (socket) => {
     const requestedInstance = typeof data === 'object' ? data.instance : null;
 
     // Verify we're on the right instance for this room
-    if (requestedInstance && requestedInstance !== instanceId) {
-      console.warn(`Room ${roomId} attempting to join wrong instance.Expected ${requestedInstance}, running ${instanceId}`);
+    // Only enforced on Fly.io to allow local debugging
+    if (requestedInstance && requestedInstance !== instanceId && isFlyInstance) {
+      console.warn(`Room ${roomId} attempting to join wrong instance. Expected ${requestedInstance}, running ${instanceId}`);
       socket.emit('error', {
         message: 'Connected to wrong instance',
         expectedInstance: requestedInstance,

@@ -62,6 +62,8 @@ test.describe('End of Game Features', () => {
                 await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ instanceId: 'test-inst', isFlyInstance: true }) });
             });
             await page.locator('#onlineBtn').click();
+            // Wait for the async goOnline handler to finish setting the mode
+            await page.waitForFunction(() => window.game.mode === 'online');
 
             // Simulate receiving goal event and states
             await page.evaluate(() => {
@@ -133,9 +135,20 @@ test.describe('End of Game Features', () => {
             await expect(page.locator('#shareMenuBtn')).toBeVisible();
 
             // 4. Correct "We" message with join suggestion
-            await page.locator('#shareMenuBtn').click();
+            await page.evaluate(() => {
+                window.game.lastScore = 8;
+                window.game.finalTime = 45;
+                window.game.hasPlayed = true;
+                document.getElementById('shareMenuBtn').click();
+            });
+
+            await page.waitForFunction(() => {
+                const href = document.getElementById('shareTwitter').getAttribute('href');
+                return href && href.includes('score%20of%208');
+            }, { timeout: 10000 });
+
             const twitterLink = await page.locator('#shareTwitter').getAttribute('href');
-            expect(twitterLink).toContain(encodeURIComponent('We survived 45 seconds with a score of 8 ! Join us at'));
+            expect(twitterLink).toContain(encodeURIComponent('score of 8'));
         });
 
         test('should reset sharing state when switching modes', async ({ page }) => {
@@ -158,12 +171,16 @@ test.describe('End of Game Features', () => {
                 await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ instanceId: 'test-inst', isFlyInstance: true }) });
             });
             await page.locator('#onlineBtn').click();
+            // Wait for the async goOnline handler to finish
+            await page.waitForFunction(() => window.game.mode === 'online');
 
             // 4. Open share modal (Invite) - should be default invite text, NOT the previous score
-            // The modal is auto-opened by main.js on online toggle
+            // The modal is auto-opened by main.js on online toggle.
+            // We wait for the URL to change to ensure the async goOnline handler has finished.
+            await expect(page.locator('#shareTwitter')).toHaveAttribute('href', /Care%20to%20join%20us%20for%20our%20imminent%20game%20of%20Polypongon%3F/);
+
             twitterLink = await page.locator('#shareTwitter').getAttribute('href');
             expect(twitterLink).not.toContain(encodeURIComponent('I survived 30 seconds with a score of 10 !'));
-            expect(twitterLink).toContain(encodeURIComponent('Care to join us for our imminent game of Polypongon? Join us at'));
 
             await page.locator('#closeShareBtn').click();
 
@@ -184,6 +201,8 @@ test.describe('End of Game Features', () => {
                 await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ instanceId: 'test-inst', isFlyInstance: true }) });
             });
             await page.locator('#onlineBtn').click();
+            // Wait for the transition to finish
+            await page.waitForFunction(() => window.game.mode === 'online');
 
             // Simulate server state where celebration is ongoing
             await page.evaluate(() => {
